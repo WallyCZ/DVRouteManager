@@ -1,0 +1,9 @@
+{
+    "Id": "DVRouteManager",
+    "DisplayName": "Route Manager",
+    "Author": "Wally",
+    "Version": "0.1.0",
+    "EntryMethod": "DVRouteManager.Module.Load",
+    "HomePage": "https://www.nexusmods.com/derailvalley/mods/157",
+    "Repository": "https://raw.githubusercontent.com/WallyCZ/DVRouteManager/master/Info.json"
+}
