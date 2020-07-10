@@ -26,5 +26,32 @@ namespace DVRouteManager
             int j = Array.IndexOf(Arr, currentEnumItem) - 1;
             return (j == -1) ? Arr.GetValue(Arr.Length - 1) : Arr.GetValue(j);
         }
+
+        public static (Bogie aBoogie, Bogie bBogie) GetBogiesWithMaxDistance(TrainCar aCar, TrainCar bCar)
+        {
+            float maxDistanceSquare = 0.0f;
+
+            Bogie aBoogie = null;
+            Bogie bBoogie = null;
+
+            foreach (var a in aCar.Bogies)
+            {
+                foreach (var b in bCar.Bogies)
+                {
+                    float lengthSquare = (a.transform.position - b.transform.position).sqrMagnitude;
+                    if(lengthSquare > maxDistanceSquare)
+                    {
+                        maxDistanceSquare = lengthSquare;
+                        aBoogie = a;
+                        bBoogie = b;
+                    }
+                }
+            }
+
+            return (aBoogie, bBoogie);
+        }
+
+
+
     }
 }

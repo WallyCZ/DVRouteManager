@@ -69,6 +69,11 @@ namespace DVRouteManager
     }
     */
 
+    public class TrackTransition
+    {
+        public RailTrack track;
+        public RailTrack nextTrack;
+    }
 
     public class PathFinder
     {
@@ -116,8 +121,13 @@ namespace DVRouteManager
                 this.track = track;
             }
         }
-        // A* search
-        public void AStart(bool allowReverse, HashSet<string> carsToIgnore)
+        /// <summary>
+        /// A* search
+        /// </summary>
+        /// <param name="allowReverse"></param>
+        /// <param name="carsToIgnore"></param>
+        /// <param name="consistLength"></param>
+        protected void Astar(bool allowReverse, HashSet<string> carsToIgnore, double consistLength, List<TrackTransition> bannedTransitions)
         {
             cameFrom = new Dictionary<RailTrack, RailTrack>();
             costSoFar = new Dictionary<RailTrack, double>();
@@ -134,12 +144,7 @@ namespace DVRouteManager
 
             while (queue.Count > 0)
             {
-                // Get the Location from the frontier that has the lowest
-                // priority, then remove that Location from the frontier
                 current = queue.Dequeue().track;
-
-                // If we're at the goal Location, stop looking.
-                //if (current.Equals(goal)) break;
 
                 RailTrack prev = null;
                 cameFrom.TryGetValue(current, out prev);
@@ -160,42 +165,60 @@ namespace DVRouteManager
                 string branches = DumpNodes(neighbors, current);
                 debug += "\n" + $"all branches: {branches}";
 
-                if (!allowReverse)
-                {
-                    // we must remove branches, where the path involves reversing
-                    neighbors = neighbors.Where(t => current.CanGoToDirectly(prev, t)).ToList();
-                    if (neighbors.Count > 0)
-                    {
-                        branches = DumpNodes(neighbors, current);
-                        debug += "\n" + $"reduced branches: {branches}";
-                    }
-                    else
-                    {
-                        debug += "\n" + $"no branches after reducing";
-                    }
-                }
-
-               
-#if DEBUG
+#if DEBUG2
                 Terminal.Log(debug);
 #endif
 
-
                 foreach (var neighbor in neighbors)
                 {
-                    //if track is not free omit it
-                    if (neighbor != start && neighbor != goal && !neighbor.IsFree(carsToIgnore))
+                    if(bannedTransitions != null && bannedTransitions.All(t=> t.track == current && t.nextTrack == neighbor))
+                    {
+                        Terminal.Log($"{current.logicTrack.ID.FullID}->{neighbor.logicTrack.ID.FullID} banned");
+                        continue;
+                    }
+
+                    //if non start/end track is not free omit it
+                    if (neighbor != start && neighbor != goal && ! neighbor.logicTrack.IsFree(carsToIgnore))
                     {
                         Terminal.Log($"{neighbor.logicTrack.ID.FullID} not free");
                         continue;
                     }
 
+                    //if we could go through junction directly (without reversing)
+                    bool isDirect = current.CanGoToDirectly(prev, neighbor);
+
+                    if ( ! allowReverse && ! isDirect)
+                    {
+                        Terminal.Log($"{neighbor.logicTrack.ID.FullID} reverse needed");
+                        continue;
+                    }
+
+#if DEBUG2
+                    if (current.logicTrack.ID.FullDisplayID.ToLower()  == "#y-#s-47-#t")
+                    {
+                        Terminal.Log($"isDirect {isDirect} {prev?.logicTrack.ID.FullID}->{current.logicTrack.ID.FullID}->{neighbor.logicTrack.ID.FullID}");
+                    }
+#endif
+
                     // compute exact cost
                     double newCost = costSoFar[current] + neighbor.logicTrack.length;
 
+                    if( ! isDirect)
+                    {
+                        // if we can't fit consist on this track to reverse, drop this neighbor
+                        if ( prev != null && !current.IsDirectLengthEnough(prev, consistLength))
+                        {
+                            Terminal.Log($"{neighbor.logicTrack.ID.FullID} not long enough to reverse");
+                            continue;
+                        }
+
+                        //add penalty when we must revrese
+                        newCost += 2.0 * consistLength + 30.0;
+                    }
+
                     // If there's no cost assigned to the neighbor yet, or if the new
                     // cost is lower than the assigned one, add newCost for this neighbor
-                    if (!costSoFar.ContainsKey(neighbor) || newCost < costSoFar[neighbor])
+                    if ( ! costSoFar.ContainsKey(neighbor) || newCost < costSoFar[neighbor])
                     {
 
                         // If we're replacing the previous cost, remove it
@@ -214,7 +237,6 @@ namespace DVRouteManager
                     }
                 }
             }
-
         }
 
         private static string DumpNodes(List<RailTrack> neighbors, RailTrack parent)
@@ -251,7 +273,7 @@ namespace DVRouteManager
                     prefix += ":";
                     return prefix + t.logicTrack.ID.FullID;
                 })
-                .Aggregate((a, b) =>
+                .Aggregate(string.Empty, (a, b) =>
                 {
                     return a + "|" + b;
                 })
@@ -259,7 +281,7 @@ namespace DVRouteManager
         }
 
         // Return a List of Locations representing the found path
-        public List<RailTrack> FindPath(bool allowReverse)
+        public List<RailTrack> FindPath(bool allowReverse, double consistLength, List<TrackTransition> bannedTransitions)
         {
             List<RailTrack> path = new List<RailTrack>();
 
@@ -269,9 +291,11 @@ namespace DVRouteManager
             HashSet<string> carsToIgnore = new HashSet<string>();
 
             if (PlayerManager.LastLoco != null)
-                carsToIgnore.Add(PlayerManager.LastLoco.logicCar.ID);
+            {
+                PlayerManager.LastLoco.trainset.cars.ForEach(c => carsToIgnore.Add(c.logicCar.ID));
+            }
 
-            AStart(allowReverse, carsToIgnore);
+            Astar(allowReverse, carsToIgnore, consistLength, bannedTransitions);
 
             RailTrack current = goal;
             //path.Add(current);

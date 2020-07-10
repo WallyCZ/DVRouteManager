@@ -1,6 +1,7 @@
 ﻿using CommandTerminal;
 using DV.Logic.Job;
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -11,12 +12,17 @@ namespace DVRouteManager
 {
     public class Route
     {
+        public const double REVERSE_SECTOR_LENGTH = 10.0;
 
         public List<RailTrack> Path { get; }
         public Track Destination { get; }
         public double Length { get; }
 
         public Dictionary<string, Junction> Reverses { get; } = new Dictionary<string, Junction>();
+
+        public RailTrack FirstTrack { get => Path.FirstOrDefault(); }
+        public RailTrack SecondTrack { get => Path.Skip(1).FirstOrDefault(); }
+        public RailTrack LastTrack { get => Path.LastOrDefault(); }
 
         public Route(List<RailTrack> path, Track destination)
         {
@@ -27,23 +33,22 @@ namespace DVRouteManager
 
             double length = 0.0;
 
-            WalkPath((prevTrack, track, nextTrack, junctionId) =>
+            WalkPath((walkData) =>
             {
                 Junction reversingJunction;
 
-                if(nextTrack == null || track.CanGoToDirectly(prevTrack, nextTrack, out reversingJunction))
-                {
-                    length += track.logicTrack.length;
-                }
-                else
+                if (walkData.nextTrack != null && !walkData.currentTrack.CanGoToDirectly(walkData.prevTrack, walkData.nextTrack, out reversingJunction))
                 {
                     if (reversingJunction != null)
                     {
-                        Reverses.Add(junctionId, reversingJunction);
-                        Terminal.Log($"Reversing needed on junction {junctionId}");
+                        Reverses.Add(walkData.junctionId, reversingJunction);
+                        Terminal.Log($"Reversing needed on junction {walkData.junctionId}");
                     }
-                    length += 10.0; //Here should be train length to be perfect
                 }
+
+                length = walkData.distanceFromStart;
+
+                return true;
             });
 
             Length = length;
@@ -85,13 +90,32 @@ namespace DVRouteManager
             }
         }
 
+        public static string GetJunctionId(RailTrack prevTrack, RailTrack track, RailTrack nextTrack)
+        {
+            return $"{prevTrack?.logicTrack.ID.FullID}->{track?.logicTrack.ID.FullID}->{nextTrack?.logicTrack.ID.FullID}";
+        }
+
+        public class WalkPathData
+        {
+            public RailTrack prevTrack;
+            public RailTrack currentTrack;
+            public RailTrack nextTrack;
+            public string junctionId;
+            public int pathIndex;
+            public double distanceFromStart;
+        }
+
         /// <summary>
         /// Goes throuh whole path and calls callback with current, previous and next track
         /// </summary>
         /// <param name="callback"></param>
-        public void WalkPath(Action<RailTrack, RailTrack, RailTrack, string> callback)
+        public void WalkPath(Func<WalkPathData, bool> callback)
         {
             IEnumerator<RailTrack> enumerator = Path.GetEnumerator();
+
+            WalkPathData walkData = new WalkPathData();
+            walkData.pathIndex = -1;
+            walkData.distanceFromStart = 0.0;
 
             if (enumerator.MoveNext())
             {
@@ -101,7 +125,7 @@ namespace DVRouteManager
                 {
                     var track = enumerator.Current;
 
-#if DEBUG
+#if DEBUG2
                     Terminal.Log($"Track ID: {track.logicTrack.ID.FullID}");
 #endif
 
@@ -110,12 +134,31 @@ namespace DVRouteManager
                     if (enumerator.MoveNext())
                         nextTrack = enumerator.Current;
 
-                    string junctionId = $"{prevTrack?.logicTrack.ID.FullID}->{track?.logicTrack.ID.FullID}->{nextTrack?.logicTrack.ID.FullID}";
+                    string junctionId = GetJunctionId(prevTrack, track, nextTrack);
 
-                    callback(prevTrack, track, nextTrack, junctionId);
+
+                    walkData.prevTrack = prevTrack;
+                    walkData.currentTrack = track;
+                    walkData.nextTrack = nextTrack;
+                    walkData.junctionId = junctionId;
+                    walkData.pathIndex++;
+
+                    if (!callback(walkData))
+                    {
+                        break;
+                    }
 
                     if (nextTrack == null)
                         break;
+
+                    if (Reverses.ContainsKey(junctionId))
+                    {
+                        walkData.distanceFromStart += REVERSE_SECTOR_LENGTH;
+                    }
+                    else
+                    {
+                        walkData.distanceFromStart += track.logicTrack.length;
+                    }
 
                     prevTrack = track;
                 }
@@ -125,39 +168,49 @@ namespace DVRouteManager
         public void AdjustSwitches()
         {
             int count = 0;
-            
-            WalkPath((prevTrack, track, nextTrack, junctionId) =>
-            {
-                int switchedCount = 0;
 
+            HashSet<Junction> junctionsForReversing = new HashSet<Junction>();
+
+            WalkPath((walkData) =>
+            {
                 Junction reversingJunction = null;
 
-                Reverses.TryGetValue(junctionId, out reversingJunction);
+                Reverses.TryGetValue(walkData.junctionId, out reversingJunction);
 
 
-                if (track.inJunction != null && prevTrack != null)
+                if (walkData.currentTrack.inJunction != null && walkData.prevTrack != null)
                 {
-                   string branches = "[" + track.inJunction.outBranches.Select(b => b.track.logicTrack.ID.FullID).Aggregate((a, b) => a + "|" + b) + "]";
+                    string branches = "[" + walkData.currentTrack.inJunction.outBranches.Select(b => b.track.logicTrack.ID.FullID).Aggregate((a, b) => a + "|" + b) + "]";
 #if DEBUG
-                        Terminal.Log($"InJunction track: {track.logicTrack.ID.FullID} nexttrack {nextTrack.logicTrack.ID.FullID} inbranch {track.inJunction.inBranch.track.logicTrack.ID.FullID} outbranches {branches} selectedBranch {track.inJunction.selectedBranch}");
+                        Terminal.Log($"InJunction track: {walkData.currentTrack.logicTrack.ID.FullID} nexttrack {walkData.nextTrack.logicTrack.ID.FullID} inbranch {walkData.currentTrack.inJunction.inBranch.track.logicTrack.ID.FullID} outbranches {branches} selectedBranch {walkData.currentTrack.inJunction.selectedBranch}");
 #endif
-                    if (reversingJunction != track.inJunction && SwitchJunctionIfNeeded(track, prevTrack, track.inJunction))
+                    if (!junctionsForReversing.Contains(walkData.currentTrack.inJunction) && SwitchJunctionIfNeeded(walkData.currentTrack, walkData.prevTrack, walkData.currentTrack.inJunction))
                     {
-                       count++;
+                        count++;
                     }
                 }
 
-                if (track.outJunction != null && nextTrack != null)
+                if (walkData.currentTrack.outJunction != null && walkData.nextTrack != null)
                 {
-                   string branches = "[" + track.outJunction.outBranches.Select(b => b.track.logicTrack.ID.FullID).Aggregate((a, b) => a + "|" + b) + "]";
+                    string branches = "[" + walkData.currentTrack.outJunction.outBranches.Select(b => b.track.logicTrack.ID.FullID).Aggregate((a, b) => a + "|" + b) + "]";
 #if DEBUG
-                        Terminal.Log($"OutJunction track: {track.logicTrack.ID.FullID} nexttrack {nextTrack.logicTrack.ID.FullID} inbranch {track.outJunction.inBranch.track.logicTrack.ID.FullID} outbranches {branches} selectedBranch {track.outJunction.selectedBranch}");
+                        Terminal.Log($"OutJunction track: {walkData.currentTrack.logicTrack.ID.FullID} nexttrack {walkData.nextTrack.logicTrack.ID.FullID} inbranch {walkData.currentTrack.outJunction.inBranch.track.logicTrack.ID.FullID} outbranches {branches} selectedBranch {walkData.currentTrack.outJunction.selectedBranch}");
 #endif
-                    if (reversingJunction != track.outJunction && SwitchJunctionIfNeeded(track, nextTrack, track.outJunction))
+                    if ( !junctionsForReversing.Contains(walkData.currentTrack.outJunction) && SwitchJunctionIfNeeded(walkData.currentTrack, walkData.nextTrack, walkData.currentTrack.outJunction))
                     {
-                       count++;
+                        count++;
                     }
                 }
+
+                if(reversingJunction != null)
+                {
+#if DEBUG
+                    Terminal.Log($"reversing junction {reversingJunction.GetInstanceID()}");
+#endif
+                    junctionsForReversing.Add(reversingJunction);
+                }
+
+                return true;
             });
 
             Terminal.Log($"Switched {count}");
@@ -189,5 +242,61 @@ namespace DVRouteManager
             return false;
         }
 
+
+        public WalkPathData GetPrevTrack(RailTrack currentTrack, RailTrack nextTrack)
+        {
+            WalkPathData result = null;
+
+            WalkPath((walkData) =>
+            {
+                if (currentTrack == walkData.currentTrack && nextTrack == walkData.nextTrack)
+                {
+                    result = walkData;
+                    return false;
+                }
+
+                return true;
+            });
+
+            return result;
+        }
+
+        public WalkPathData GetNextTrack(RailTrack currentTrack, RailTrack prevTrack)
+        {
+            WalkPathData result = null;
+
+            WalkPath((walkData) =>
+            {
+                if (currentTrack == walkData.currentTrack && prevTrack == walkData.prevTrack)
+                {
+                    result = walkData;
+                    return false;
+                }
+
+                return true;
+            });
+
+            return result;
+        }
+
+        public RailTrack GetPrevTrack(RailTrack currentTrack)
+        {
+            RailTrack result = null;
+
+            WalkPath((walkData) =>
+            {
+                if (currentTrack == walkData.currentTrack)
+                {
+                    result = walkData.nextTrack;
+                    return false;
+                }
+
+                return true;
+            });
+
+            return result;
+        }
+
     }
+
 }

@@ -33,30 +33,30 @@ namespace DVRouteManager
             double totalLength = 0;
             const double step = 200;
             double next = step;
+            Color color = Color.green;
 
-            route.WalkPath((prevTrack, track, nextTrack, junctionId) =>
+            route.WalkPath((walkData) =>
             {
-                double length = track.logicTrack.length;
+                double length = walkData.currentTrack.logicTrack.length;
 
-                if(route.Reverses.ContainsKey(junctionId))
+                if(route.Reverses.ContainsKey(walkData.junctionId))
                 {
-                    length = 10.0;
+                    length = Route.REVERSE_SECTOR_LENGTH;
+                    color = color == Color.red ? Color.green : Color.red;
                 }
 
                 while (next > totalLength && next < (totalLength + length))
                 {
                     float localDistance = Mathf.InverseLerp((float)totalLength, (float)(totalLength + length), (float)next);
 
-                    if ((prevTrack != null && !track.IsTrackInBranch(prevTrack))
-                        || (nextTrack != null && track.IsTrackInBranch(nextTrack)))
+                    if ((walkData.prevTrack != null && !walkData.currentTrack.IsTrackInBranch(walkData.prevTrack))
+                        || (walkData.nextTrack != null && walkData.currentTrack.IsTrackInBranch(walkData.nextTrack)))
                     {
                         localDistance = 1.0f - localDistance;
                     }
 
 
-                    Vector3 pointPos = track.curve.GetPointAt(localDistance); ;
-
-
+                    Vector3 pointPos = walkData.currentTrack.curve.GetPointAt(localDistance); ;
 
                     Vector3 mapPosition = (Vector3)GetMapPositionMethod.Invoke(mapController, new object[] { pointPos - WorldMover.currentMove, map.triggerExtentsXZ });
 
@@ -64,7 +64,8 @@ namespace DVRouteManager
                     point.transform.localPosition = mapPosition + Vector3.up * 0.0002f;
                     point.transform.localScale *= 0.5f;
                     MeshRenderer mr = point.GetComponent<MeshRenderer>();
-                    mr.material.color = Color.red;
+
+                    mr.material.color = color;
 
                     points.Add(point);
 
@@ -72,6 +73,7 @@ namespace DVRouteManager
                 }
 
                 totalLength += length;
+                return true;
             });
         }
     }

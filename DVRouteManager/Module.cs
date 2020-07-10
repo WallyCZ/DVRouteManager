@@ -22,6 +22,7 @@ namespace DVRouteManager
     {
         public static UnityModManager.ModEntry mod;
         private static Route currentRoute;
+        private static RouteTracker routeTracker;
 
         public static Route CurrentRoute
         {
@@ -32,16 +33,36 @@ namespace DVRouteManager
                 if (currentRoute != null)
                     PathMapMarker.DrawPathToMap(currentRoute);
                 else
+                {
+                    RouteTracker = null;
                     PathMapMarker.DestroyPoints();
+                }
 
             }
         }
         public static bool IsCurrentRouteSet { get => CurrentRoute != null; }
 
-        private static RouteTracker RouteTracker { get; } = new RouteTracker();
+        public static RouteTracker RouteTracker { 
+            get => routeTracker;
+            set
+            {
+                if(routeTracker != null)
+                {
+                    routeTracker.Dispose();
+                    routeTracker = null;
+                }
+
+                routeTracker = value;
+            }
+        }
 
         public static PathMapMarkers PathMapMarker { get; } = new PathMapMarkers();
 
+        public static AudioClip stopTrainClip { get; private set; }
+        public static AudioClip reverseTrainClip { get; private set; }
+        public static AudioClip wrongWayClip { get; private set; }
+
+        public static AudioSource generalAudioSource { get; private set; }
 
         public class VersionInfo
         {
@@ -58,8 +79,13 @@ namespace DVRouteManager
                 mod = modEntry;
                 mod.OnToggle = OnToggle;
 
+                stopTrainClip = AudioUtils.LoadAudioClip("stoptrain.wav", "stoptrain");
+                reverseTrainClip = AudioUtils.LoadAudioClip("reversetrain.wav", "reversetrain");
+                wrongWayClip = AudioUtils.LoadAudioClip("wrongway.wav", "wrongway");
+
                 var harmony = new Harmony(modEntry.Info.Id);
                 harmony.PatchAll(Assembly.GetExecutingAssembly());
+
             }
             catch (Exception exc)
             {
@@ -99,7 +125,7 @@ namespace DVRouteManager
                     var json = (IDictionary<string, object>)SimpleJson.SimpleJson.DeserializeObject(www.downloadHandler.text);
 
                     JsonObject releaseInfo = ((json["Releases"] as JsonArray)?[0] as JsonObject);
-                    string version = (string) releaseInfo?["Version"];
+                    string version = (string)releaseInfo?["Version"];
 
                     if (version != mod.Info.Version)
                     {
@@ -124,33 +150,62 @@ namespace DVRouteManager
             Terminal.Autocomplete.Register("route");
             Terminal.Log("Route command registered");
         }
-        public static IEnumerator SetupLocoPositionUpdate()
-        {
-            string lastTrackFullID = "";
 
-            while (true)
+        public static IEnumerator SetupAudio()
+        {
+            AudioListener listener = null;
+
+            //yield return new WaitForSeconds(5.0f);
+
+            while (listener == null)
             {
-                if (PlayerManager.LastLoco != null)
-                {
-                    RailTrack track = PlayerManager.LastLoco.Bogies[0].track;
-                    if (track != null && track.logicTrack.ID.FullID != lastTrackFullID)
-                    {
-                        lastTrackFullID = track.logicTrack.ID.FullID;
-                        RouteTracker.UpdateCurrentTrack(track, null);
-                    }
-                }
-                yield return null;
+                yield return new WaitForSeconds(0.5f);
+                listener = UnityEngine.Object.FindObjectOfType<AudioListener>();
+            }
+
+            generalAudioSource = listener.gameObject.AddComponent<AudioSource>();
+            //audioSource.outputAudioMixerGroup = Engine_Layered_Audio.audioMixerGroup;
+            generalAudioSource.playOnAwake = true;
+            generalAudioSource.loop = false;
+            generalAudioSource.maxDistance = 300f;
+            generalAudioSource.clip = Module.stopTrainClip;
+            generalAudioSource.spatialBlend = 1f;
+            generalAudioSource.dopplerLevel = 0f;
+            generalAudioSource.spread = 10f;
+        }
+
+        public static void PlayClip(AudioClip clip)
+        {
+            if (generalAudioSource != null && clip != null)
+            {
+                generalAudioSource.clip = clip;
+                generalAudioSource.Play();
             }
         }
 
-        private static void StartCoroutines()
+        public static Coroutine StartCoroutine(IEnumerator coroutine)
         {
-            MonoBehaviour mb = UnityEngine.Object.FindObjectOfType<MonoBehaviour>();
+            MonoBehaviour mb = UnityEngine.Object.FindObjectOfType<Camera>().GetComponent<MonoBehaviour>(); //hopefuly we will have luck to choose some MonoBehaviour, that will not call stopAllCoroutines
             if (mb != null)
             {
-                mb.StartCoroutine(SetupCommands());
-                mb.StartCoroutine(SetupLocoPositionUpdate());
-                mb.StartCoroutine(CheckUpdates());
+                return mb.StartCoroutine(coroutine);
+            }
+            else
+            {
+                mod.Logger.Log("Cant start coroutines because no monobehaviour was found");
+            }
+
+            return null;
+        }
+        public static void StartCoroutines(IEnumerator[] coroutines)
+        {
+            MonoBehaviour mb = UnityEngine.Object.FindObjectOfType<Camera>().GetComponent<MonoBehaviour>(); //hopefuly we will have luck to choose some MonoBehaviour, that will not call stopAllCoroutines
+            if (mb != null)
+            {
+                foreach (var coroutine in coroutines)
+                {
+                    mb.StartCoroutine(coroutine);
+                }
             }
             else
             {
@@ -158,18 +213,33 @@ namespace DVRouteManager
             }
         }
 
-        private static void StopCoroutines()
+        private static void StartInitCoroutines()
         {
             MonoBehaviour mb = UnityEngine.Object.FindObjectOfType<MonoBehaviour>();
             if (mb != null)
             {
+                mb.StartCoroutine(SetupCommands());
+                mb.StartCoroutine(SetupAudio());
+                mb.StartCoroutine(CheckUpdates());
+            }
+            else
+            {
+                mod.Logger.Log("Cant start init coroutines because no monobehaviour was found");
+            }
+        }
+
+        private static void StopInitCoroutines()
+        {
+            //this is wrong because MonoBehaviour could be different that started these coroutines
+            MonoBehaviour mb = UnityEngine.Object.FindObjectOfType<MonoBehaviour>();
+            if (mb != null)
+            {
                 mb.StopCoroutine(SetupCommands());
-                mb.StopCoroutine(SetupLocoPositionUpdate());
                 mb.StopCoroutine(CheckUpdates());
             }
             else
             {
-                mod.Logger.Log("Cant stop coroutines because no monobehaviour was found");
+                mod.Logger.Log("Cant stop init coroutines because no monobehaviour was found");
             }
         }
 
@@ -179,13 +249,14 @@ namespace DVRouteManager
         {
             if (active)
             {
-                StartCoroutines();
+                StartInitCoroutines();
             }
             else
             {
                 Terminal.Shell.Commands.Remove("route");
-                StopCoroutines();
+                StopInitCoroutines();
                 //Terminal.Autocomplete.UnRegister("route"); //currently not able unregister
+                CurrentRoute = null;
             }
 
             return true;

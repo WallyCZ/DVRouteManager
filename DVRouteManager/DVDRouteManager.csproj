@@ -82,6 +82,10 @@
       <HintPath>C:\Program Files (x86)\Steam\steamapps\common\Derail Valley\DerailValley_Data\Managed\UnityEngine.dll</HintPath>
       <Private>False</Private>
     </Reference>
+    <Reference Include="UnityEngine.AudioModule">
+      <HintPath>C:\Program Files (x86)\Steam\steamapps\common\Derail Valley\DerailValley_Data\Managed\UnityEngine.AudioModule.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
     <Reference Include="UnityEngine.CoreModule">
       <HintPath>C:\Program Files (x86)\Steam\steamapps\common\Derail Valley\DerailValley_Data\Managed\UnityEngine.CoreModule.dll</HintPath>
       <Private>False</Private>
@@ -108,8 +112,12 @@
     </Reference>
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="AudioUtils.cs" />
+    <Compile Include="LocoAI.cs" />
     <Compile Include="CommsRouteManager.cs" />
     <Compile Include="Extensions\GameObjectExtension.cs" />
+    <Compile Include="Extensions\JunctionExtension.cs" />
+    <Compile Include="Extensions\TrainsetExtension.cs" />
     <Compile Include="Internals\Unzip.cs" />
     <Compile Include="PathFinder.cs" />
     <Compile Include="Module.cs" />
@@ -118,10 +126,11 @@
     <Compile Include="Extensions\RailTrackExtension.cs" />
     <Compile Include="Route.cs" />
     <Compile Include="RouteCommand.cs" />
+    <Compile Include="RouteTask.cs" />
     <Compile Include="RouteTracker.cs" />
     <Compile Include="Selector.cs" />
     <Compile Include="Extensions\StringExtension.cs" />
-    <Compile Include="SimpleJson.cs" />
+    <Compile Include="Internals\SimpleJson.cs" />
     <Compile Include="Utils.cs" />
   </ItemGroup>
   <ItemGroup>
