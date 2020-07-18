@@ -7,6 +7,7 @@ using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Threading.Tasks;
+using UnityAsync;
 using UnityEngine;
 using UnityModManagerNet;
 
@@ -127,8 +128,10 @@ namespace DVRouteManager
         /// <param name="allowReverse"></param>
         /// <param name="carsToIgnore"></param>
         /// <param name="consistLength"></param>
-        protected void Astar(bool allowReverse, HashSet<string> carsToIgnore, double consistLength, List<TrackTransition> bannedTransitions)
+        protected async System.Threading.Tasks.Task Astar(bool allowReverse, HashSet<string> carsToIgnore, double consistLength, List<TrackTransition> bannedTransitions)
         {
+            await Await.BackgroundSyncContext();
+
             cameFrom = new Dictionary<RailTrack, RailTrack>();
             costSoFar = new Dictionary<RailTrack, double>();
 
@@ -193,17 +196,11 @@ namespace DVRouteManager
                         continue;
                     }
 
-#if DEBUG2
-                    if (current.logicTrack.ID.FullDisplayID.ToLower()  == "#y-#s-47-#t")
-                    {
-                        Terminal.Log($"isDirect {isDirect} {prev?.logicTrack.ID.FullID}->{current.logicTrack.ID.FullID}->{neighbor.logicTrack.ID.FullID}");
-                    }
-#endif
-
                     // compute exact cost
-                    double newCost = costSoFar[current] + neighbor.logicTrack.length;
+                    //double newCost = costSoFar[current] + neighbor.logicTrack.length;
+                    double newCost = costSoFar[current] + neighbor.logicTrack.length / neighbor.GetAverageSpeed();
 
-                    if( ! isDirect)
+                    if ( ! isDirect)
                     {
                         // if we can't fit consist on this track to reverse, drop this neighbor
                         if ( prev != null && !current.IsDirectLengthEnough(prev, consistLength))
@@ -212,8 +209,9 @@ namespace DVRouteManager
                             continue;
                         }
 
-                        //add penalty when we must revrese
-                        newCost += 2.0 * consistLength + 30.0;
+                        //add penalty when we must reverse
+                        
+                        //newCost += 2.0 * consistLength + 30.0;
                     }
 
                     // If there's no cost assigned to the neighbor yet, or if the new
@@ -232,11 +230,14 @@ namespace DVRouteManager
 
                         costSoFar.Add(neighbor, newCost);
                         cameFrom.Add(neighbor, current);
-                        double priority = newCost + Heuristic(neighbor, goal);
+                        double priority = newCost + Heuristic(neighbor, goal)
+                            / 20.0f; //convert distance to time (t = s / v)
                         queue.Enqueue(new RailTrackNode(neighbor), priority);
                     }
                 }
             }
+
+            await Await.UnitySyncContext();
         }
 
         private static string DumpNodes(List<RailTrack> neighbors, RailTrack parent)
@@ -281,12 +282,12 @@ namespace DVRouteManager
         }
 
         // Return a List of Locations representing the found path
-        public List<RailTrack> FindPath(bool allowReverse, double consistLength, List<TrackTransition> bannedTransitions)
+        public async Task<Route> FindPath(bool allowReverse, double consistLength, List<TrackTransition> bannedTransitions)
         {
             List<RailTrack> path = new List<RailTrack>();
 
             if (start == null || goal == null)
-                return path;
+                return null;
 
             HashSet<string> carsToIgnore = new HashSet<string>();
 
@@ -295,7 +296,7 @@ namespace DVRouteManager
                 PlayerManager.LastLoco.trainset.cars.ForEach(c => carsToIgnore.Add(c.logicCar.ID));
             }
 
-            Astar(allowReverse, carsToIgnore, consistLength, bannedTransitions);
+            await Astar(allowReverse, carsToIgnore, consistLength, bannedTransitions);
 
             RailTrack current = goal;
             //path.Add(current);
@@ -305,7 +306,7 @@ namespace DVRouteManager
                 if (!cameFrom.ContainsKey(current))
                 {
                     Terminal.Log($"cameFrom does not contain current {current.logicTrack.ID.FullID}");
-                    return new List<RailTrack>();
+                    return null;
                 }
 
                 path.Add(current);
@@ -319,7 +320,7 @@ namespace DVRouteManager
             
             path.Reverse();
             
-            return path;
+            return new Route(path, goal.logicTrack);
         }
     }
 }

@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using UnityEngine;
 using UnityEngine.UI;
 
 namespace DVRouteManager
@@ -242,7 +243,184 @@ namespace DVRouteManager
             return (current.OccupiedLength / current.length) > ratio;
         }
 
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="current"></param>
+        /// <returns>m/s</returns>
+        public static float GetAverageSpeed(this RailTrack current)
+        {
+#if DEBUG
+            var watch = System.Diagnostics.Stopwatch.StartNew();
+            var watchGetTangent = new System.Diagnostics.Stopwatch();
+#endif
 
+            const float step = 25f;
+            float trackPos = 0.0f;
+
+            int num = -1;
+
+            float speedSum = 0;
+
+            float realSpeed = 0;
+
+            float trackLength = (float)current.logicTrack.length;
+
+            float lastAngle = 0;
+
+            float curveTotalDistance = 0.0f;
+
+            BezierPoint[] points = current.curve.GetAnchorPoints();
+
+            BezierPoint p1 = points[0];
+            BezierPoint p2 = points[1];
+            float curveBlockLength = BezierCurve.ApproximateLength(p1, p2, 10);
+            int curvePointIndex = 1;
+
+            if(current.curve.close)
+            {
+                Terminal.Log($"Closed curve not supported yet!");
+            }
+
+            while (trackPos < trackLength)
+            {
+                float localDistance = Mathf.InverseLerp(0.0f, trackLength, trackPos);
+
+                while (trackPos > (curveTotalDistance + curveBlockLength))
+                {
+                    curveTotalDistance += curveBlockLength;
+                    p1 = points[curvePointIndex];
+                    p2 = points[curvePointIndex + 1];
+                    curvePointIndex++;
+                    curveBlockLength = BezierCurve.ApproximateLength(p1, p2, 10);
+                }
+
+#if DEBUG
+                watchGetTangent.Start();
+#endif
+                float localCurveDistance = Mathf.InverseLerp(curveTotalDistance, curveTotalDistance + curveBlockLength, trackPos);
+
+                //Vector3 tangent2 = current.curve.GetTangentAt(localDistance); // Slow as f*ck
+                Vector3 tangent = current.curve.GetTangent(p1, p2, localCurveDistance);
+
+                //Terminal.Log($"tan1 {tangent2} tan2 {tangent} local {localCurveDistance} total {curveTotalDistance} block {curveBlockLength} pos {trackPos}");
+
+#if DEBUG
+                watchGetTangent.Stop();
+#endif
+                float angle = Mathf.Atan2(tangent.z, tangent.x);
+
+                if (num >= 0)
+                {
+                    float maxSpeed = AngleDiffToSpeed( Utils.GetAngleDifference(lastAngle, angle), step);
+
+                    if(num == 0)
+                    {
+                        realSpeed = maxSpeed;
+                    }
+                    else
+                    {
+                        if(maxSpeed > realSpeed)
+                        {
+                            if (realSpeed < 1.0f)
+                                realSpeed = 1.0f;
+
+                            realSpeed += step / realSpeed;
+                        }
+                        else
+                        {
+                            realSpeed = maxSpeed;
+                        }
+                    }
+
+                    speedSum += realSpeed;
+                }
+
+                num++;
+
+                trackPos += step;
+                lastAngle = angle;
+            }
+
+            if (num <= 0)
+            {
+                //if track segment is too short, take two end points
+                Vector3 tangent1 = current.curve.GetTangentAt(0.0f);
+                Vector3 tangent2 = current.curve.GetTangentAt(1.0f);
+
+                float angle1 = Mathf.Atan2(tangent1.z, tangent1.x);
+                float angle2 = Mathf.Atan2(tangent2.z, tangent2.x);
+
+#if DEBUG2
+                watch.Stop();
+                //Terminal.Log($"num {num} {watch.ElapsedMilliseconds}ms");
+#endif
+                return AngleDiffToSpeed(Utils.GetAngleDifference(angle1, angle2), trackLength);
+            }
+#if DEBUG2
+            watch.Stop();
+            if (num > 100)
+            {
+                Terminal.Log($"num {num} all {watch.ElapsedMilliseconds}ms tangent {watchGetTangent.ElapsedMilliseconds}");
+            }
+#endif
+            return (speedSum / num) * 3.6f; // km/h -> m/s
+        }
+
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="angleDiff"></param>
+        /// <param name="step"></param>
+        /// <returns>km/h</returns>
+        public static float AngleDiffToSpeed(float angleDiff, float step)
+        {
+            angleDiff = angleDiff * 180f / Mathf.PI / step;
+
+
+            if (angleDiff < 0.01f)
+            {
+                return 120.0f;
+            }
+            if (angleDiff < 0.08f)
+            {
+                return 100.0f;
+            }
+            if (angleDiff < 0.14f)
+            {
+                return 90.0f;
+            }
+            if (angleDiff < 0.19f)
+            {
+                return 80.0f;
+            }
+            if (angleDiff < 0.28f)
+            {
+                return 70.0f;
+            }
+            if (angleDiff < 0.40f)
+            {
+                return 60.0f;
+            }
+            if (angleDiff < 0.48f)
+            {
+                return 50.0f;
+            }
+            if (angleDiff < 0.63f)
+            {
+                return 40.0f;
+            }
+            if (angleDiff < 0.80f)
+            {
+                return 30.0f;
+            }
+            if (angleDiff < 1.40f)
+            {
+                return 20.0f;
+            }
+
+            return 10.0f;
+        }
     }
 
 }

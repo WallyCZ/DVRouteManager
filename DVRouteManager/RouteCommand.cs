@@ -31,7 +31,7 @@ namespace DVRouteManager
 
     public static class RouteCommand
     {
-        public static void DoTerminalCommand(CommandArg[] args)
+        public static async void DoTerminalCommand(CommandArg[] args)
         {
             try
             {
@@ -48,7 +48,7 @@ namespace DVRouteManager
                         return;
                     }
 
-                    DoCommand(args);
+                    await DoCommand(args);
                 }
             }
             catch (CommandException exc)
@@ -57,10 +57,10 @@ namespace DVRouteManager
             }
             catch (Exception exc)
             {
-                Terminal.Log(exc.Message + " " + exc.StackTrace);
+                Terminal.Log($"{exc.Message} {exc.InnerException} {exc.StackTrace}");
             }
         }
-        public static void DoCommand(CommandArg[] args)
+        public async static System.Threading.Tasks.Task DoCommand(CommandArg[] args)
         {
             if(args.Length == 0)
             {
@@ -108,6 +108,9 @@ namespace DVRouteManager
 
                 TrainCar trainCar;
 
+
+                RouteTracker routeTracker = new RouteTracker(chain, true);
+
                 if (args[0].String == "loco")
                 {
                     trainCar = PlayerManager.LastLoco;
@@ -119,22 +122,21 @@ namespace DVRouteManager
                 }
                 else
                 {
-                    trainCar = Module.RouteTracker.CurrentTask.TrainSets.FirstOrDefault()?.firstCar;
+                    trainCar = routeTracker.CurrentTask.TrainSets.FirstOrDefault()?.firstCar;
                 }
 
-                Module.RouteTracker = new RouteTracker(chain, trainCar, true);
-
-                if (Module.RouteTracker.CurrentTask == null)
+                if (routeTracker.CurrentTask == null)
                 {
-                    Module.RouteTracker = null;
                     throw new CommandException("No suitable task");
                 }
 
                 Track startTrack = trainCar.trainset.firstCar.Bogies[0].track.logicTrack;
 
-                FindAndSwitch(startTrack, Module.RouteTracker.CurrentTask.DestinationTrack, ReversingStrategy.ChooseBest, trainCar.trainset);
+                await FindAndSwitch(startTrack, routeTracker.CurrentTask.DestinationTrack, ReversingStrategy.ChooseBest, trainCar.trainset);
 
-                Module.RouteTracker.SetRoute(Module.CurrentRoute);
+                routeTracker.SetRoute(Module.ActiveRoute.Route, trainCar.trainset);
+
+                Module.ActiveRoute.RouteTracker = routeTracker;
 
             }
             else if (args[0].String == "tracker")
@@ -146,16 +148,16 @@ namespace DVRouteManager
                     throw new CommandException("No last loco");
                 }
 
-                if (Module.RouteTracker.CurrentTask == null)
+                if (Module.ActiveRoute.RouteTracker.CurrentTask == null)
                 {
                     throw new CommandException("Tracker has no task");
                 }
 
                 Track startTrack = trainCar.trainset.firstCar.Bogies[0].track.logicTrack;
 
-                FindAndSwitch(startTrack, Module.RouteTracker.CurrentTask.DestinationTrack, ReversingStrategy.ChooseBest, trainCar.trainset);
+                await FindAndSwitch(startTrack, Module.ActiveRoute.RouteTracker.CurrentTask.DestinationTrack, ReversingStrategy.ChooseBest, trainCar.trainset);
 
-                Module.RouteTracker.SetRoute(Module.CurrentRoute);
+                Module.ActiveRoute.RouteTracker.SetRoute(Module.ActiveRoute.Route, trainCar.trainset);
             }
             else if (args[0].String == "from" && args.Length == 4 && args[2].String == "to")
             {
@@ -177,22 +179,35 @@ namespace DVRouteManager
                     //TODO
                 }
 
+                if (trainset == null)
+                {
+                    throw new CommandException("Goal track must be associated with car");
+                }
+
+
                 RailTrack startTrack = TrackFinder.AllTracks.FirstOrDefault((RailTrack track) => track?.logicTrack.ID.FullDisplayID == args[1].String);
 
                 RailTrack goalTrack = TrackFinder.AllTracks.FirstOrDefault((RailTrack track) => track?.logicTrack.ID.FullDisplayID == args[3].String);
+
+                RouteTaskChain chain = RouteTaskChain.FromDestination(goalTrack.logicTrack, trainset);
+                var tracker = new RouteTracker(chain, false);
+
 
                 if (startTrack == null || goalTrack == null)
                 {
                     throw new CommandException("start track or goal track not found");
                 }
 
-                FindAndSwitch(startTrack.logicTrack, goalTrack.logicTrack, ReversingStrategy.ChooseBest, trainset);
+                await FindAndSwitch(startTrack.logicTrack, goalTrack.logicTrack, ReversingStrategy.ChooseBest, trainset);
+
+                tracker.SetRoute(Module.ActiveRoute.Route, trainset);
+                Module.ActiveRoute.RouteTracker = tracker;
             }
             else if (args[0].String == "clear")
             {
-                if (Module.IsCurrentRouteSet)
+                if (Module.ActiveRoute.IsSet)
                 {
-                    Module.CurrentRoute = null;
+                    Module.ActiveRoute.ClearRoute();
                 }
                 else
                 {
@@ -201,12 +216,12 @@ namespace DVRouteManager
             }
             else if (args[0].String == "info")
             {
-                if(Module.IsCurrentRouteSet)
+                if(Module.ActiveRoute.IsSet)
                 {
                     Terminal.Log("Active route:");
-                    Terminal.Log(Module.CurrentRoute.ToString());
+                    Terminal.Log( Module.ActiveRoute.Route.ToString());
 #if DEBUG
-                    Terminal.Log( Module.CurrentRoute.Path.Select(t => t.logicTrack.ID.FullID).Aggregate((i, j) => i + "->" + j) );
+                    Terminal.Log( Module.ActiveRoute.Route.Path.Select(t => t.logicTrack.ID.FullID).Aggregate((i, j) => i + "->" + j) );
 #endif
                 }
                 else
@@ -244,11 +259,11 @@ namespace DVRouteManager
                     throw new CommandException("No last loco");
                 }
 
-                ILocomotiveRemoteControl remote = trainCar.GetComponent<ILocomotiveRemoteControl>();
-
-                if (trainCar == null)
+                if(args[1].String == "stop")
                 {
-                    throw new CommandException("No loco remote");
+                    var locoAI = Module.GetLocoAI(trainCar);
+                    locoAI.Stop();
+                    return;
                 }
 
                 RailTrack goalTrack = TrackFinder.AllTracks.FirstOrDefault((RailTrack track) => track?.logicTrack.ID.FullDisplayID == args[1].String);
@@ -258,16 +273,16 @@ namespace DVRouteManager
                 }
 
                 RouteTaskChain chain = RouteTaskChain.FromDestination(goalTrack.logicTrack, trainCar.trainset);
-                var tracker = new RouteTracker(chain, trainCar, false);
+                var tracker = new RouteTracker(chain, false);
 
                 Track startTrack = trainCar.trainset.firstCar.Bogies[0].track.logicTrack;
 
-                var route = FindRoute(startTrack, tracker.CurrentTask.DestinationTrack, ReversingStrategy.ChooseBest, trainCar.trainset);
+                var route = await FindRoute(startTrack, tracker.CurrentTask.DestinationTrack, ReversingStrategy.ChooseBest, trainCar.trainset);
 
-                tracker.SetRoute(route);
+                tracker.SetRoute(route, trainCar.trainset);
 
-                var driver = new LocoAI(tracker, remote);
-                driver.Start();
+                var driver = Module.GetLocoAI(trainCar);
+                driver.StartAI(tracker);
             }
             else
             {
@@ -276,7 +291,7 @@ namespace DVRouteManager
 
         }
 
-        private static void FindAndSwitch(Track begin, Track end, ReversingStrategy reversingStrategy, Trainset trainset)
+        private async static System.Threading.Tasks.Task FindAndSwitch(Track begin, Track end, ReversingStrategy reversingStrategy, Trainset trainset)
         {
             if (begin is null)
             {
@@ -288,24 +303,22 @@ namespace DVRouteManager
                 throw new CommandException("Empty end");
             }
 
-            var route = FindRoute(begin, end, reversingStrategy, trainset);
+            var route = await FindRoute(begin, end, reversingStrategy, trainset);
             if (route == null)
             {
-                Module.CurrentRoute = null;
+                Module.ActiveRoute.ClearRoute();
                 throw new CommandException("Path cannot be found");
             }
             else
             {
-                Module.CurrentRoute = route;
+                Module.ActiveRoute.Route = route;
                 route.AdjustSwitches();
             }
         }
 
-        private static Route FindRoute(Track begin, Track end, ReversingStrategy reversingStrategy, Trainset trainset)
+        private async static Task<Route> FindRoute(Track begin, Track end, ReversingStrategy reversingStrategy, Trainset trainset)
         {
             List<TrackTransition> trackTransitions = null;
-
-
 
             double consistLength = 30.0;
 
@@ -316,46 +329,27 @@ namespace DVRouteManager
 
 
             PathFinder pathFinder = new PathFinder(begin, end);
-            var path = pathFinder.FindPath(false, consistLength, trackTransitions);
-            Route route = null;
+            Route route = await pathFinder.FindPath(false, consistLength, trackTransitions);
 
-            if (path.Count == 0 || reversingStrategy == ReversingStrategy.ChooseBest)
+            if (route == null || reversingStrategy == ReversingStrategy.ChooseBest)
             {
 #if DEBUG
                 Terminal.Log($"Trying path with allowed reversing");
 #endif
-                var pathWithReversing = pathFinder.FindPath(true, consistLength, trackTransitions);
+                var routeWithReversing = await pathFinder.FindPath(true, consistLength, trackTransitions);
 
-                if (pathWithReversing.Count > 0)
+                if (routeWithReversing != null)
                 {
-                    if (path.Count > 0) //choose best
-                    {
-                        var routeWithoutReversing = new Route(path, end);
-                        var routeWithReversing = new Route(pathWithReversing, end);
+                    Terminal.Log($"withoutreversing: {route?.Length} withReversing: {routeWithReversing.Length}");
 
-                        Terminal.Log($"withoutreversing: {routeWithoutReversing.Length} withReversing: {routeWithReversing.Length}");
-
-                        route  = routeWithoutReversing.Length > routeWithReversing.Length ? routeWithReversing : routeWithoutReversing;
-                    }
-                    else
-                    {
-                        path = pathWithReversing;
-                    }
+                    route = (route == null || route.Length > routeWithReversing.Length) ? routeWithReversing : route;
                 }
             }
 
-            if(route != null)
+            if(route == null)
             {
-                Terminal.Log($"Found {route}");
-                return route;
+                throw new CommandException($"Route not found");
             }
-
-            if (path.Count == 0)
-            {
-                return null;
-            }
-
-            route = new Route(path, end);
 
             Terminal.Log($"Found {route}");
 

@@ -1,5 +1,6 @@
 ﻿using CommandTerminal;
 using DV.Logic.Job;
+using DVRouteManager.Extensions;
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -31,14 +32,20 @@ namespace DVRouteManager
         public RouteTask CurrentTask { get; protected set; }
         public RouteTaskChain TaskChain { get; protected set; }
 
-        public TrainCar Loco { get; protected set; }
+        private double notifyTrainEndPosition = double.MaxValue;
 
-        public RouteTracker(RouteTaskChain chain, TrainCar loco, bool audio)
+        public Trainset Trainset { get; protected set; }
+
+        public RouteTracker(RouteTaskChain chain, bool audio)
         {
             TaskChain = chain;
-            Loco = loco;
             TakeTask();
             this.audio = audio;
+
+            /*if(audio)
+            {
+                InputSystem
+            }*/
         }
 
         public double DistanceTraveled { get; set; } = 0.0;
@@ -51,9 +58,11 @@ namespace DVRouteManager
             }
         }
 
-        public void SetRoute(Route route)
+        public void SetRoute(Route route, Trainset trainset)
         {
-            if(route == null)
+            Trainset = trainset;
+
+            if (route == null)
             {
                 throw new ArgumentNullException(nameof(route));
             }
@@ -96,7 +105,7 @@ namespace DVRouteManager
                     switch (_trackState)
                     {
                         case TrackingState.ReverseTrain:
-                            Module.PlayClip(Module.reverseTrainClip);
+                            Module.PlayClip(Module.trainEnd);
                             break;
                         case TrackingState.StopTrainAfterSwitch:
                             Module.PlayClip(Module.stopTrainClip);
@@ -188,23 +197,41 @@ namespace DVRouteManager
                     if (moving)
                     {
                         double diff = spanCurrent - span;
-                        trackNext = diff < 0 ? trackCurrent.GetInTrack() : trackCurrent.GetOutTrack();
+                        if (diff < -Mathf.Epsilon)
+                        {
+                            trackNext = trackCurrent.GetInTrack();
+                        }
+                        else if (diff > Mathf.Epsilon)
+                        {
+                            trackNext = trackCurrent.GetOutTrack();
+                        }
+
                         span = spanCurrent;
                     }
                 }
 
             }
 
+            public bool TrackDirection
+            {
+                get
+                {
+                    if (trackPrev == null)
+                        return trackNext != track.GetInTrack();
+
+                    return trackPrev == track.GetInTrack();
+                }
+            }
+
             public double PosOnTrack
             {
                 get
                 {
-                    if(trackPrev == null)
-                        return trackNext != track.GetInTrack() ? span : track.logicTrack.length - span;
-
-                    return trackPrev == track.GetInTrack() ? span : track.logicTrack.length - span;
+                    return TrackDirection ? span : track.logicTrack.length - span;
                 }
             }
+
+            public double Span { get => span; }
 
         }
 
@@ -220,8 +247,8 @@ namespace DVRouteManager
 
                 if (PlayerManager.LastLoco != null)
                 {
-                    TrainCar firstCar = Loco.trainset.firstCar;
-                    TrainCar lastCar = Loco.trainset.lastCar;
+                    TrainCar firstCar = Trainset.firstCar;
+                    TrainCar lastCar = Trainset.lastCar;
 
                     (Bogie firstBoogie, Bogie lastBogie) = Utils.GetBogiesWithMaxDistance(firstCar, lastCar);
 
@@ -257,7 +284,8 @@ namespace DVRouteManager
 #endif
         }
 
-
+        float lastAngle;
+        double lastPos;
 
         protected void UpdateCurrentTrack(CarTrackPosition firstCar, CarTrackPosition lastCar)
         {
@@ -294,17 +322,40 @@ namespace DVRouteManager
                 Terminal.Log($"lastPathData: {lastPathData?.prevTrack?.logicTrack.ID.FullID}->{lastPathData?.currentTrack.logicTrack.ID.FullID}->{lastPathData?.nextTrack?.logicTrack.ID.FullID}");
                 Terminal.Log($"firstCar {firstCar.dvCar.logicCar.ID}: {firstCar.trackPrev?.logicTrack.ID.FullID}->{firstCar.track?.logicTrack.ID.FullID}->{firstCar.trackNext?.logicTrack.ID.FullID}");
                 Terminal.Log($"lastCar {lastCar.dvCar.logicCar.ID}: {lastCar.trackPrev?.logicTrack.ID.FullID}->{lastCar.track?.logicTrack.ID.FullID}->{lastCar.trackNext?.logicTrack.ID.FullID}");
-
             }
 #endif
             if(isOnTrack)
             {
                 DistanceTraveled = posFromStart;
+
+                if( (posFromStart - Trainset.Length()) > notifyTrainEndPosition)
+                {
+                    notifyTrainEndPosition = double.MaxValue;
+                    Module.PlayClip(Module.trainEnd);
+                }
+
             }
 
 #if DEBUG
-            Terminal.Log($"isOnTrack: {isOnTrack} firstCar: {car == firstCar} trackDistance: {pathData?.distanceFromStart} posFromstart: {DistanceTraveled} posToFinish: {DistanceToFinish} carTrack: {car?.track?.logicTrack.ID.FullID} carNext: {car?.trackNext?.logicTrack.ID.FullID} carMoving: {car?.moving} carVelocity: {car?.dvCar.GetVelocity().sqrMagnitude} carChangedTrack: {car?.changedTrack}");
+            float span = (float)Mathd.Clamp01(car.span / car.track.logicTrack.length);
+            Vector3 tan = car.track.curve.GetTangentAt(span );
+            if (!car.TrackDirection)
+                tan = -tan;
+            Vector2 tand = new Vector2(tan.x, tan.z);
+            float angle = Mathf.Atan2(tand.y, tand.x);
+
+
+
+            //Terminal.Log($"isOnTrack: {isOnTrack} firstCar: {car == firstCar} trackDistance: {pathData?.distanceFromStart} posFromstart: {DistanceTraveled} posToFinish: {DistanceToFinish} carTrack: {car?.track?.logicTrack.ID.FullID} carNext: {car?.trackNext?.logicTrack.ID.FullID} carMoving: {car?.moving} carVelocity: {car?.dvCar.GetVelocity().sqrMagnitude} carChangedTrack: {car?.changedTrack}  tan: {tan}");
+            float angleDiff = Utils.GetAngleDifference(lastAngle, angle);
+            float speed = RailTrackExtension.AngleDiffToSpeed(angleDiff, (float) (posFromStart - lastPos));
+            angleDiff = angleDiff * 180f / Mathf.PI / Mathf.Abs((float)(posFromStart - lastPos));
+            Terminal.Log($"isOnTrack: {isOnTrack} car: {car.dvCar.ID} posFromstart: {DistanceTraveled} posToFinish: {DistanceToFinish} carTrack: {car?.track?.logicTrack.ID.FullID} carNext: {car?.trackNext?.logicTrack.ID.FullID} carMoving: {car?.moving} isBezier: { ! car?.track.IsCurveNotUsingConnectedBezierPoints()} tan: {tand} angle: {Mathf.Atan2(tand.y, tand.x)} magn {tand.magnitude} angleDiff {angleDiff} {speed}");
+            lastAngle = angle;
+            lastPos = posFromStart;
 #endif
+
+
 
             if (TrackState == TrackingState.BeforeStart)
             {
@@ -350,7 +401,7 @@ namespace DVRouteManager
                 {
                     if ((firstCar.track.logicTrack == CurrentTask.DestinationTrack && lastCar.track.logicTrack == CurrentTask.DestinationTrack)
                         || CurrentTask.DestinationTrack.IsOccupiedAtLeast(0.8f)
-                        || ! CurrentTask.DestinationTrack.IsFree(Loco.trainset))
+                        || ! CurrentTask.DestinationTrack.IsFree(Trainset))
                     {
                         OnTaskFinished();
                     }
@@ -358,6 +409,14 @@ namespace DVRouteManager
                 else if (car.changedTrack && pathData != null)
                 {
                     Junction junction = null;
+
+                    if(/*DistanceToFinish < 1000.0f
+                        &&*/ ((Route.Reverses.Count % 2 == 0 && car.dvCar.IsLoco) || (Route.Reverses.Count % 2 == 1 && ! car.dvCar.IsLoco))
+                        && !Route.Destination.IsFree()
+                    )
+                    {
+                        Terminal.Log($"Should approach reversed!!!");
+                    }
 
                     Terminal.Log($"junctionId {pathData.junctionId}");
                     if (Route.Reverses.TryGetValue(pathData.junctionId, out junction))
@@ -443,7 +502,7 @@ namespace DVRouteManager
 
             if(CurrentTask == null)
             {
-                Module.CurrentRoute = null;
+                Module.ActiveRoute.ClearRoute(); //TODO - remove Module dependency
             }
             else
             {
@@ -451,7 +510,8 @@ namespace DVRouteManager
                     {
                         new CommandArg() { String = "tracker" }
                     };
-                RouteCommand.DoCommand(args);
+                var commandtask = RouteCommand.DoCommand(args);
+                commandtask.Start();
             }
 
         }
@@ -475,6 +535,17 @@ namespace DVRouteManager
             {
                 Dispose();
             }
+        }
+
+        public void NotifyTrainEnd()
+        {
+            notifyTrainEndPosition = DistanceTraveled;
+
+            if(audio)
+            {
+                Module.PlayClip(Module.setClip);
+            }
+            Terminal.Log($"notifyEnd: {DistanceTraveled}");
         }
 
         public void Dispose()

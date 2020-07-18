@@ -52,6 +52,14 @@ namespace DVRouteManager
         }
 
 
+        public static float GetAngleDifference(float alpha, float beta)
+        {
+            float phi = Mathf.Abs(beta - alpha) % (Mathf.PI * 2.0f);
+            float distance = phi > Mathf.PI ? (Mathf.PI * 2.0f) - phi : phi;
+            return distance;
+        }
+
+
 
     }
 }

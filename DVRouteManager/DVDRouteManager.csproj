@@ -19,7 +19,7 @@
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <DebugSymbols>true</DebugSymbols>
-    <DebugType>full</DebugType>
+    <DebugType>pdbonly</DebugType>
     <Optimize>false</Optimize>
     <OutputPath>bin\Debug\</OutputPath>
     <DefineConstants>DEBUG;TRACE</DefineConstants>
@@ -98,6 +98,13 @@
       <HintPath>C:\Program Files (x86)\Steam\steamapps\common\Derail Valley\DerailValley_Data\Managed\UnityEngine.IMGUIModule.dll</HintPath>
       <Private>False</Private>
     </Reference>
+    <Reference Include="UnityEngine.InputLegacyModule, Version=0.0.0.0, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>C:\Program Files (x86)\Steam\steamapps\common\Derail Valley\DerailValley_Data\Managed\UnityEngine.InputLegacyModule.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.InputModule">
+      <HintPath>C:\Program Files (x86)\Steam\steamapps\common\Derail Valley\DerailValley_Data\Managed\UnityEngine.InputModule.dll</HintPath>
+    </Reference>
     <Reference Include="UnityEngine.UI">
       <HintPath>C:\Program Files (x86)\Steam\steamapps\common\Derail Valley\DerailValley_Data\Managed\UnityEngine.UI.dll</HintPath>
       <Private>False</Private>
@@ -112,13 +119,35 @@
     </Reference>
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="ActiveRoute.cs" />
     <Compile Include="AudioUtils.cs" />
+    <Compile Include="CommsRadio\CRMPageArgs.cs" />
+    <Compile Include="CommsRadio\CRMSelectorSubPage.cs" />
+    <Compile Include="CommsRadio\CRMSubPage.cs" />
+    <Compile Include="CommsRadio\CRMSelectorPage.cs" />
+    <Compile Include="CommsRadio\ICRMPageManager.cs" />
+    <Compile Include="CommsRadio\MessageSubPage.cs" />
+    <Compile Include="CommsRadio\SelectTownStationTrackPage.cs" />
+    <Compile Include="CommsRadio\MessagePage.cs" />
+    <Compile Include="CommsRadio\SelectTrackPage.cs" />
+    <Compile Include="CommsRadio\SelectStationPage.cs" />
+    <Compile Include="CommsRadio\SelectTownPage.cs" />
+    <Compile Include="CommsRadio\SelectJobPage.cs" />
+    <Compile Include="CommsRadio\NewRoutePage.cs" />
+    <Compile Include="CommsRadio\RouteInfoPage.cs" />
+    <Compile Include="CommsRadio\CruiseControlPage.cs" />
+    <Compile Include="CommsRadio\LocoAIPage.cs" />
+    <Compile Include="CommsRadio\SettingsPage.cs" />
+    <Compile Include="CommsRadio\MainPage.cs" />
+    <Compile Include="CommsRadio\InitPage.cs" />
+    <Compile Include="LocoCruiseControl.cs" />
     <Compile Include="LocoAI.cs" />
-    <Compile Include="CommsRouteManager.cs" />
+    <Compile Include="CommsRadio\CommsRouteManager.cs" />
     <Compile Include="Extensions\GameObjectExtension.cs" />
     <Compile Include="Extensions\JunctionExtension.cs" />
     <Compile Include="Extensions\TrainsetExtension.cs" />
     <Compile Include="Internals\Unzip.cs" />
+    <Compile Include="CommsRadio\CRMPage.cs" />
     <Compile Include="PathFinder.cs" />
     <Compile Include="Module.cs" />
     <Compile Include="PathMapMarkers.cs" />
@@ -128,13 +157,41 @@
     <Compile Include="RouteCommand.cs" />
     <Compile Include="RouteTask.cs" />
     <Compile Include="RouteTracker.cs" />
-    <Compile Include="Selector.cs" />
+    <Compile Include="CommsRadio\Selector.cs" />
     <Compile Include="Extensions\StringExtension.cs" />
     <Compile Include="Internals\SimpleJson.cs" />
+    <Compile Include="UnityAsync\Awaiters\AsyncOperationAwaiter.cs" />
+    <Compile Include="UnityAsync\Awaiters\IEnumeratorAwaiter.cs" />
+    <Compile Include="UnityAsync\Awaiters\ResourceRequestAwaiter.cs" />
+    <Compile Include="UnityAsync\Awaiters\SynchronizationContextAwaiter.cs" />
+    <Compile Include="UnityAsync\Awaiters\YieldInstructionAwaiter.cs" />
+    <Compile Include="UnityAsync\AwaitInstructionAwaiter.cs" />
+    <Compile Include="UnityAsync\AwaitInstructions\WaitForFrames.cs" />
+    <Compile Include="UnityAsync\AwaitInstructions\WaitForSeconds.cs" />
+    <Compile Include="UnityAsync\AwaitInstructions\WaitForSecondsRealtime.cs" />
+    <Compile Include="UnityAsync\AwaitInstructions\WaitUntil.cs" />
+    <Compile Include="UnityAsync\AwaitInstructions\WaitUntil`T.cs" />
+    <Compile Include="UnityAsync\AwaitInstructions\WaitWhile.cs" />
+    <Compile Include="UnityAsync\AwaitInstructions\WaitWhile`T.cs" />
+    <Compile Include="UnityAsync\Await\Await.cs" />
+    <Compile Include="UnityAsync\Extensions.cs" />
+    <Compile Include="UnityAsync\IAwaitInstruction.cs" />
+    <Compile Include="UnityAsync\Manager\AsyncManager.ContinuationProcessorGroup.ContinuationProcessor.cs" />
+    <Compile Include="UnityAsync\Manager\AsyncManager.ContinuationProcessorGroup.cs" />
+    <Compile Include="UnityAsync\Manager\AsyncManager.cs" />
+    <Compile Include="UnityAsync\TaskYieldInstruction.cs" />
     <Compile Include="Utils.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />
   </ItemGroup>
+  <ItemGroup>
+    <Service Include="{508349B6-6B84-4DF5-91F0-309BEEBAD82D}" />
+  </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+  <PropertyGroup>
+    <PostBuildEvent>set pdb2mdb=$(SolutionDir)..\..\unity-mod-manager\UnityModManager\bin\Debug\pdb2mdb.exe
+
+IF EXIST %25pdb2mdb%25 %25pdb2mdb%25 DVRouteManager.dll</PostBuildEvent>
+  </PropertyGroup>
 </Project>

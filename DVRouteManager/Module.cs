@@ -2,6 +2,7 @@
 using DV;
 using DV.Logic.Job;
 using DV.Teleporters;
+using DVRouteManager.CommsRadio;
 using HarmonyLib;
 using SimpleJson;
 using System;
@@ -10,6 +11,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using System.Xml.Schema;
+using UnityAsync;
 using UnityEngine;
 using UnityEngine.Networking;
 using UnityEngine.SceneManagement;
@@ -21,48 +23,31 @@ namespace DVRouteManager
     static class Module
     {
         public static UnityModManager.ModEntry mod;
-        private static Route currentRoute;
-        private static RouteTracker routeTracker;
 
-        public static Route CurrentRoute
-        {
-            get => currentRoute;
-            set
-            {
-                currentRoute = value;
-                if (currentRoute != null)
-                    PathMapMarker.DrawPathToMap(currentRoute);
-                else
-                {
-                    RouteTracker = null;
-                    PathMapMarker.DestroyPoints();
-                }
-
-            }
-        }
-        public static bool IsCurrentRouteSet { get => CurrentRoute != null; }
-
-        public static RouteTracker RouteTracker { 
-            get => routeTracker;
-            set
-            {
-                if(routeTracker != null)
-                {
-                    routeTracker.Dispose();
-                    routeTracker = null;
-                }
-
-                routeTracker = value;
-            }
-        }
-
-        public static PathMapMarkers PathMapMarker { get; } = new PathMapMarkers();
+        public static ActiveRoute ActiveRoute { get; } = new ActiveRoute();
 
         public static AudioClip stopTrainClip { get; private set; }
-        public static AudioClip reverseTrainClip { get; private set; }
+        public static AudioClip trainEnd { get; private set; }
         public static AudioClip wrongWayClip { get; private set; }
+        public static AudioClip offClip { get; private set; }
+        public static AudioClip onClip { get; private set; }
+        public static AudioClip setClip { get; private set; }
 
         public static AudioSource generalAudioSource { get; private set; }
+
+        private static Dictionary<string, LocoAI> locosAI = new Dictionary<string, LocoAI>();
+        public static LocoAI GetLocoAI(TrainCar car)
+        {
+            LocoAI locoAI;
+            if( ! locosAI.TryGetValue(car.logicCar.ID, out locoAI))
+            {
+                ILocomotiveRemoteControl remote = car.GetComponent<ILocomotiveRemoteControl>();
+                locoAI = new LocoAI(remote);
+                locosAI.Add(car.logicCar.ID, locoAI);
+            }
+
+            return locoAI;
+        }
 
         public class VersionInfo
         {
@@ -78,13 +63,19 @@ namespace DVRouteManager
             {
                 mod = modEntry;
                 mod.OnToggle = OnToggle;
+                mod.OnUpdate = OnUpdate;
 
-                stopTrainClip = AudioUtils.LoadAudioClip("stoptrain.wav", "stoptrain");
-                reverseTrainClip = AudioUtils.LoadAudioClip("reversetrain.wav", "reversetrain");
-                wrongWayClip = AudioUtils.LoadAudioClip("wrongway.wav", "wrongway");
+                stopTrainClip = AudioUtils.LoadAudioClip("audio\\stoptrain.wav", "stoptrain");
+                trainEnd = AudioUtils.LoadAudioClip("audio\\trainend.wav", "trainend");
+                wrongWayClip = AudioUtils.LoadAudioClip("audio\\wrongway.wav", "wrongway");
+                onClip = AudioUtils.LoadAudioClip("audio\\on.wav", "on");
+                offClip = AudioUtils.LoadAudioClip("audio\\off.wav", "off");
+                setClip = AudioUtils.LoadAudioClip("audio\\set.wav", "set");
 
                 var harmony = new Harmony(modEntry.Info.Id);
                 harmony.PatchAll(Assembly.GetExecutingAssembly());
+
+                AsyncManager.Initialize();
 
             }
             catch (Exception exc)
@@ -94,6 +85,7 @@ namespace DVRouteManager
 
             return true;
         }
+
         public static IEnumerator CheckUpdates()
         {
             while (Terminal.Shell == null || Terminal.Autocomplete == null)
@@ -159,7 +151,7 @@ namespace DVRouteManager
 
             while (listener == null)
             {
-                yield return new WaitForSeconds(0.5f);
+                yield return new UnityEngine.WaitForSeconds(0.5f);
                 listener = UnityEngine.Object.FindObjectOfType<AudioListener>();
             }
 
@@ -185,62 +177,27 @@ namespace DVRouteManager
 
         public static Coroutine StartCoroutine(IEnumerator coroutine)
         {
-            MonoBehaviour mb = UnityEngine.Object.FindObjectOfType<Camera>().GetComponent<MonoBehaviour>(); //hopefuly we will have luck to choose some MonoBehaviour, that will not call stopAllCoroutines
-            if (mb != null)
-            {
-                return mb.StartCoroutine(coroutine);
-            }
-            else
-            {
-                mod.Logger.Log("Cant start coroutines because no monobehaviour was found");
-            }
-
-            return null;
+            return AsyncManager.StartCoroutine(coroutine);
         }
         public static void StartCoroutines(IEnumerator[] coroutines)
         {
-            MonoBehaviour mb = UnityEngine.Object.FindObjectOfType<Camera>().GetComponent<MonoBehaviour>(); //hopefuly we will have luck to choose some MonoBehaviour, that will not call stopAllCoroutines
-            if (mb != null)
+            foreach (var coroutine in coroutines)
             {
-                foreach (var coroutine in coroutines)
-                {
-                    mb.StartCoroutine(coroutine);
-                }
-            }
-            else
-            {
-                mod.Logger.Log("Cant start coroutines because no monobehaviour was found");
+                AsyncManager.StartCoroutine(coroutine);
             }
         }
 
         private static void StartInitCoroutines()
         {
-            MonoBehaviour mb = UnityEngine.Object.FindObjectOfType<MonoBehaviour>();
-            if (mb != null)
-            {
-                mb.StartCoroutine(SetupCommands());
-                mb.StartCoroutine(SetupAudio());
-                mb.StartCoroutine(CheckUpdates());
-            }
-            else
-            {
-                mod.Logger.Log("Cant start init coroutines because no monobehaviour was found");
-            }
+            AsyncManager.StartCoroutine(SetupCommands());
+            AsyncManager.StartCoroutine(SetupAudio());
+            AsyncManager.StartCoroutine(CheckUpdates());
         }
 
         private static void StopInitCoroutines()
         {
-            //this is wrong because MonoBehaviour could be different that started these coroutines
-            MonoBehaviour mb = UnityEngine.Object.FindObjectOfType<MonoBehaviour>();
-            if (mb != null)
-            {
-                mb.StopCoroutine(SetupCommands());
-                mb.StopCoroutine(CheckUpdates());
-            }
-            else
-            {
-                mod.Logger.Log("Cant stop init coroutines because no monobehaviour was found");
-            }
+            AsyncManager.StopCoroutine(SetupCommands());
+            AsyncManager.StopCoroutine(CheckUpdates());
         }
 
 
@@ -256,10 +213,33 @@ namespace DVRouteManager
                 Terminal.Shell.Commands.Remove("route");
                 StopInitCoroutines();
                 //Terminal.Autocomplete.UnRegister("route"); //currently not able unregister
-                CurrentRoute = null;
+                Module.ActiveRoute.ClearRoute();
             }
 
             return true;
+        }
+        private static void OnUpdate(ModEntry arg1, float arg2)
+        {
+            if (Module.ActiveRoute.IsSet && Module.ActiveRoute.RouteTracker != null && Input.GetKeyDown(KeyCode.N))
+            {
+                Module.ActiveRoute.RouteTracker.NotifyTrainEnd();
+            }
+
+            if (Input.GetKeyDown(KeyCode.C))
+            {
+                LocoCruiseControl.ToggleCruiseControl();
+            }
+
+            if (Input.GetKeyDown(KeyCode.V))
+            {
+                LocoCruiseControl.ToggleCruiseControl(30.0f);
+            }
+
+            if (Input.GetKeyDown(KeyCode.B))
+            {
+                LocoCruiseControl.ToggleCruiseControl(60.0f);
+            }
+
         }
 
     }
@@ -272,7 +252,6 @@ namespace DVRouteManager
             try
             {
                 var modes = Traverse.Create(__instance).Field("allModes").GetValue<List<ICommsRadioMode>>();
-                Terminal.Log($"{modes.Count} modes found");
 
                 if (modes.Count > 0)
                 {
@@ -284,6 +263,10 @@ namespace DVRouteManager
                     objToSpawn.transform.parent = (modes[0] as MonoBehaviour).gameObject.transform;
                     objToSpawn.SetActive(true);
                     modes.Add(radioMode);
+                }
+                else
+                {
+                    Terminal.Log($"No commsradio modes found");
                 }
 
             }

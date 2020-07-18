@@ -10,45 +10,55 @@ using UnityEngine;
 
 namespace DVRouteManager
 {
-    public class LocoAI
+    public class LocoAI : LocoCruiseControl
     {
-        private const float TARGET_SPEED = 20.0f;
-        private const float COUPLER_APPROACH_SPEED = 2.0f;
+        private const float TARGET_SPEED_DEFAULT = 20.0f;
+        private const float COUPLER_APPROACH_SPEED = 5.0f;
         private RouteTracker RouteTracker;
-        private ILocomotiveRemoteControl RemoteControl;
 
-        public LocoAI(RouteTracker routeTracker, ILocomotiveRemoteControl remoteControl)
+        public LocoAI(ILocomotiveRemoteControl remoteControl) :
+            base(remoteControl)
         {
-            RouteTracker = routeTracker;
-            RemoteControl = remoteControl;
         }
 
-        public bool Start()
+        public bool StartAI(RouteTracker routeTracker)
         {
+            if(RouteTracker != null)
+            {
+                RouteTracker.Dispose();
+            }
+
+            RouteTracker = routeTracker;
+
             if (RouteTracker.TrackState != RouteTracker.TrackingState.BeforeStart && RouteTracker.TrackState != RouteTracker.TrackingState.OnStart)
                 return false;
 
-            Module.StartCoroutine(MainCoroutine());
+            RouteTracker.Route.AdjustSwitches();
+
+            TargetSpeed = TARGET_SPEED_DEFAULT;
+
+            if (!running)
+            {
+                running = true;
+                Module.StartCoroutine(AICoroutine());
+            }
+
             return true;
         }
 
-        private IEnumerator MainCoroutine()
+        private IEnumerator AICoroutine()
         {
-
-            const float TIME_WAIT= 0.3f;
+            const float TIME_WAIT = 0.3f;
 
             Terminal.Log("Autonomous driver start");
             yield return null;
 
-            float targetSpeed = 0.0f;
             bool shouldreverse = false;
 
-            RemoteControl.UpdateReverser(ToggleDirection.UP);
+            remoteControl.UpdateReverser(ToggleDirection.UP);
             yield return null;
-            RemoteControl.UpdateReverser(ToggleDirection.UP);
+            remoteControl.UpdateReverser(ToggleDirection.UP);
             yield return null;
-
-            RouteTracker.Route.AdjustSwitches();
 
             float prevSpeed = 0.0f;
             float targetAcceleration = 2.5f;
@@ -58,139 +68,78 @@ namespace DVRouteManager
 
             bool couplerApproach = false;
 
-            while (true)
+            while (running)
             {
-                float speed = Mathf.Abs(RemoteControl.GetForwardSpeed() * 3.6f);
+                float speed = Mathf.Abs(remoteControl.GetForwardSpeed() * 3.6f);
                 float acceleration = (speed - prevSpeed) / timeDelta;
 
-                if(couplerApproach)
+                if (couplerApproach)
                 {
                     if (IsCouplerInRange(1.00f))
                     {
                         Terminal.Log($"coupler in ranch");
                         break; //stop train
                     }
-                    else if (IsCouplerInRange(3.0f))
+                    else if (IsCouplerInRange(7.0f))
                     {
-                        targetSpeed = 1.0f;
+                        TargetSpeed = 1.0f;
                     }
                     else
                     {
-                        targetSpeed = COUPLER_APPROACH_SPEED;
+                        TargetSpeed = COUPLER_APPROACH_SPEED;
                     }
                 }
                 else if (RouteTracker.TrackState == RouteTracker.TrackingState.RightHeading)
                 {
-                    if (RouteTracker.DistanceToFinish < 50.0f && ! RouteTracker.Route.LastTrack.logicTrack.IsFree(RouteTracker.Loco.trainset)) //finds all couplers not only on right rail
+                    if (RouteTracker.DistanceToFinish < 50.0f && !RouteTracker.Route.LastTrack.logicTrack.IsFree(RouteTracker.Trainset)) //finds all couplers not only on right rail
                     {
-                        targetSpeed = COUPLER_APPROACH_SPEED;
+                        TargetSpeed = COUPLER_APPROACH_SPEED;
                     }
                     else
                     {
-                        targetSpeed = TARGET_SPEED;
+                        TargetSpeed = TARGET_SPEED_DEFAULT;
                     }
                 }
                 else if (RouteTracker.TrackState == RouteTracker.TrackingState.OnStart)
                 {
-                    targetSpeed = TARGET_SPEED;
+                    TargetSpeed = TARGET_SPEED_DEFAULT;
                 }
                 else if (RouteTracker.TrackState == RouteTracker.TrackingState.StopTrainAfterSwitch)
                 {
-                    targetSpeed = 10.0f;
+                    TargetSpeed = 10.0f;
                     shouldreverse = true;
                 }
                 else if (RouteTracker.TrackState == RouteTracker.TrackingState.WrongHeading)
                 {
-                    if (speed > 1.0f && !shouldreverse)
+                    if (speed > 3.0f && !shouldreverse)
                     {
-                        targetSpeed = 0.0f;
+                        TargetSpeed = 0.0f;
                         shouldreverse = true;
                     }
 
-                    if (speed < 1.0f && shouldreverse)
+                    if (speed < 3.0f && shouldreverse)
                     {
                         yield return Module.StartCoroutine(Reverse());
                         shouldreverse = false;
-                        targetSpeed = TARGET_SPEED;
+                        TargetSpeed = TARGET_SPEED_DEFAULT;
                     }
                 }
                 else if (RouteTracker.TrackState == RouteTracker.TrackingState.ReverseTrain)
                 {
-                    if(speed < 1.0f && shouldreverse)
+                    if (speed < 5.0f && shouldreverse)
                     {
                         yield return Module.StartCoroutine(Reverse());
                         shouldreverse = false;
-                        targetSpeed = TARGET_SPEED;
+                        TargetSpeed = TARGET_SPEED_DEFAULT;
                     }
 
                     if (shouldreverse)
                     {
-                        targetSpeed = 0.0f;
+                        TargetSpeed = 0.0f;
                     }
                 }
 
-                float speedDiff = targetSpeed - speed;
-
-                float diff = targetAcceleration - acceleration;
-
-                Terminal.Log($"targetSpeed {targetSpeed} speediff {speedDiff} accel {acceleration} diff {diff} throttle {RemoteControl.GetTargetThrottle()}");
-
-                if (speedDiff > 5.0f)
-                {
-                    /*if (RemoteControl.GetTargetBrake() > 0.001f)
-                    {
-                        RemoteControl.UpdateBrake(-30.0f * TIME_BLOCK);
-                    }*/
-
-                    if (RemoteControl.GetTargetIndependentBrake() > Mathf.Epsilon)
-                    {
-                        RemoteControl.UpdateIndependentBrake(-30.0f * timeDelta);
-                    }
-
-                    if (RemoteControl.IsWheelslipping())
-                    {
-                        targetAcceleration -= 0.5f * timeDelta;
-                        RemoteControl.UpdateThrottle( - RemoteControl.GetTargetThrottle() * 5.0f  * timeDelta);
-                    }
-                    else
-                    {
-                        RemoteControl.UpdateThrottle(ThrottleCurve(RemoteControl.GetTargetThrottle(), diff > 0.0f) * diff * timeDelta);
-                    }
-                }
-                else if (speedDiff < -3.0f)
-                {
-                    RemoteControl.UpdateThrottle(-0.06f * speedDiff * -1.0f * timeDelta);
-                    RemoteControl.UpdateIndependentBrake(0.3f * speedDiff * -1.0f * timeDelta);
-                }
-                else
-                {
-                    if (RemoteControl.IsWheelslipping())
-                    {
-                        RemoteControl.UpdateThrottle(-RemoteControl.GetTargetThrottle() * 5.0f * timeDelta);
-                    }
-                    else
-                    {
-                        float accelCoef = -(Mathf.Sign(acceleration) * acceleration * acceleration * 0.5f);
-                        float speedCoef = Mathf.Sign(speedDiff) * speedDiff * speedDiff * 0.02f;
-                        float throttleDiff = 0.0f;
-
-                        if (Mathf.Abs(accelCoef) > 0.01f)
-                        {
-                            throttleDiff += accelCoef;
-                        }
-
-                        if (Mathf.Abs(speedCoef) > 0.01f)
-                        {
-                            throttleDiff += speedCoef;
-                        }
-
-                        throttleDiff = Mathf.Clamp(throttleDiff, -10.0f, 5.0f);
-
-                        Terminal.Log($"throttleDiff {throttleDiff} accelCoef {accelCoef} speedCoef {speedCoef}");
-                        RemoteControl.UpdateThrottle(throttleDiff * timeDelta);
-                        RemoteControl.UpdateIndependentBrake(-2.0f * timeDelta);
-                    }
-                }
+                targetAcceleration = MaintainSpeed(targetAcceleration, timeDelta, speed, acceleration);
 
                 prevSpeed = speed;
 
@@ -202,9 +151,9 @@ namespace DVRouteManager
                 if (RouteTracker.TrackState == RouteTracker.TrackingState.OutOfWay)
                     break;
 
-                if(RouteTracker.TrackState == RouteTracker.TrackingState.OnFinish)
+                if (RouteTracker.TrackState == RouteTracker.TrackingState.OnFinish)
                 {
-                    if(RouteTracker.Route.LastTrack.logicTrack.IsFree(RouteTracker.Loco.trainset))
+                    if (RouteTracker.Route.LastTrack.logicTrack.IsFree(RouteTracker.Trainset))
                     {
                         break;
                     }
@@ -217,11 +166,13 @@ namespace DVRouteManager
                 }
             }
 
+            running = false;
+
             for (int i = 0; i < 10; i++)
             {
-                RemoteControl.UpdateIndependentBrake(10.0f);
-                RemoteControl.UpdateBrake(1.0f);
-                RemoteControl.UpdateThrottle(-10.0f);
+                remoteControl.UpdateIndependentBrake(10.0f);
+                remoteControl.UpdateBrake(1.0f);
+                remoteControl.UpdateThrottle(-10.0f);
                 yield return new WaitForSeconds(0.3f);
             }
 
@@ -230,8 +181,8 @@ namespace DVRouteManager
 
         bool IsCouplerInRange(float range)
         {
-            Coupler lastCoupler = CouplerLogic.GetLastCoupler(this.RouteTracker.Loco.frontCoupler);
-            Coupler lastCoupler2 = CouplerLogic.GetLastCoupler(this.RouteTracker.Loco.rearCoupler);
+            Coupler lastCoupler = CouplerLogic.GetLastCoupler(this.RouteTracker.Trainset.firstCar.frontCoupler);
+            Coupler lastCoupler2 = CouplerLogic.GetLastCoupler(this.RouteTracker.Trainset.lastCar.rearCoupler);
             Coupler firstCouplerInRange = lastCoupler.GetFirstCouplerInRange(range);
             Coupler firstCouplerInRange2 = lastCoupler2.GetFirstCouplerInRange(range);
             return firstCouplerInRange != null || firstCouplerInRange2 != null;
@@ -239,33 +190,21 @@ namespace DVRouteManager
 
         IEnumerator Reverse()
         {
-            bool direction = RemoteControl.GetReverserSymbol().ToUpper() == "F";
+            bool direction = remoteControl.GetReverserSymbol().ToUpper() == "F";
 
-            while (RemoteControl.GetTargetThrottle() > Mathf.Epsilon)
+            while (remoteControl.GetTargetThrottle() > Mathf.Epsilon || Mathf.Abs( remoteControl.GetForwardSpeed() ) > 0.1)
             {
-                RemoteControl.UpdateThrottle(-100.0f);
+                remoteControl.UpdateIndependentBrake(1.0f);
+                remoteControl.UpdateThrottle(-100.0f);
                 yield return null;
             }
-            Terminal.Log($"reverse {RemoteControl.GetTargetThrottle()}");
-            RemoteControl.UpdateReverser(direction ? ToggleDirection.DOWN : ToggleDirection.UP);
+            Terminal.Log($"reverse {remoteControl.GetTargetThrottle()}");
+            remoteControl.UpdateReverser(direction ? ToggleDirection.DOWN : ToggleDirection.UP);
             yield return null;
-            Terminal.Log($"reverse {RemoteControl.GetTargetThrottle()}");
-            RemoteControl.UpdateReverser(direction ? ToggleDirection.DOWN : ToggleDirection.UP);
+            Terminal.Log($"reverse {remoteControl.GetTargetThrottle()}");
+            remoteControl.UpdateReverser(direction ? ToggleDirection.DOWN : ToggleDirection.UP);
             yield return null;
         }
 
-        protected float ThrottleCurve(float target, bool increasing)
-        {
-            if (increasing)
-            {
-                if (target < 0.4f)
-                    return 0.4f;
-                else return 0.06f;
-            }
-            else
-            {
-                return 0.5f;
-            }
-        }
     }
 }

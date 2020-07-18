@@ -5,8 +5,27 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace DVRouteManager
+namespace DVRouteManager.CommsRadio
 {
+    public class MenuItem
+    {
+        public string displayText;
+        public string actionName = "";
+        public Action action;
+
+        public MenuItem(string displayText, Action action)
+        {
+            this.displayText = displayText;
+            this.action = action;
+        }
+
+        public MenuItem(string displayText, string actionName, Action action)
+        {
+            this.displayText = displayText;
+            this.action = action;
+            this.actionName = actionName;
+        }
+    }
     public class Selector<T> : IEnumerator<T>
     {
         private List<T> _items;
