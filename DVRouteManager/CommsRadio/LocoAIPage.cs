@@ -45,9 +45,9 @@ namespace DVRouteManager.CommsRadio
 
                 try
                 {
-                    DisplayText($"Going to {trackPage.SelectedTrack}", "");
-
                     await RouteCommand.DoCommand(args);
+
+                    DisplayText($"Going to {trackPage.SelectedTrack}", "");
 
                     await new WaitForSeconds(1.0f);
 

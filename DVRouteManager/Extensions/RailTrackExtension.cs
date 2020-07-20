@@ -118,7 +118,7 @@ namespace DVRouteManager
             return false;
         }
 
-       
+
         public static bool IsTrackInBranch(this RailTrack current, RailTrack next)
         {
             if (!current.inIsConnected)
@@ -146,6 +146,21 @@ namespace DVRouteManager
         public static bool IsFree(this Track current, Trainset trainset)
         {
             return IsFree(current, new HashSet<string>(trainset.cars.Select(c => c.logicCar.ID)));
+        }
+
+        public static RailTrack GetNextTrack(this RailTrack current, bool direction)
+        {
+            return direction ? GetOutTrack(current) : GetInTrack(current);
+        }
+
+        public static bool GetDirectionFromPrev(this RailTrack current, RailTrack prev)
+        {
+            if (IsTrackOutBranch(current, prev))
+            {
+                return false;
+            }
+
+            return true;
         }
 
         public static RailTrack GetOutTrack(this RailTrack current)
@@ -212,7 +227,7 @@ namespace DVRouteManager
 #endif
             return true;
         }
-        public static bool IsSectorFree(this RailTrack current, double sectorLength, bool fromOutConnection )
+        public static bool IsSectorFree(this RailTrack current, double sectorLength, bool fromOutConnection)
         {
 
             if (fromOutConnection)
@@ -277,7 +292,7 @@ namespace DVRouteManager
             float curveBlockLength = BezierCurve.ApproximateLength(p1, p2, 10);
             int curvePointIndex = 1;
 
-            if(current.curve.close)
+            if (current.curve.close)
             {
                 Terminal.Log($"Closed curve not supported yet!");
             }
@@ -312,15 +327,15 @@ namespace DVRouteManager
 
                 if (num >= 0)
                 {
-                    float maxSpeed = AngleDiffToSpeed( Utils.GetAngleDifference(lastAngle, angle), step);
+                    float maxSpeed = AngleDiffToSpeed(Utils.GetAngleDifference(lastAngle, angle), step);
 
-                    if(num == 0)
+                    if (num == 0)
                     {
                         realSpeed = maxSpeed;
                     }
                     else
                     {
-                        if(maxSpeed > realSpeed)
+                        if (maxSpeed > realSpeed)
                         {
                             if (realSpeed < 1.0f)
                                 realSpeed = 1.0f;
@@ -420,6 +435,35 @@ namespace DVRouteManager
             }
 
             return 10.0f;
+        }
+
+        public static (RailTrack, double, bool) GetAheadTrack(this RailTrack current, double currentCarSpan, bool direction, double aheadDistance)
+        {
+            aheadDistance -= direction ? current.logicTrack.length - currentCarSpan : currentCarSpan;
+
+            while(aheadDistance >= 0.0f)
+            {
+                RailTrack nextTrack = current.GetNextTrack(direction);
+
+                if(nextTrack == null)
+                {
+                    break;
+                }
+
+                direction = nextTrack.GetDirectionFromPrev(current);
+
+                current = nextTrack;
+
+                aheadDistance -= current.logicTrack.length;
+            }
+
+            double span = direction ? current.logicTrack.length + aheadDistance : -aheadDistance;
+            if(span > current.logicTrack.length)
+            {
+                span = current.logicTrack.length;
+            }
+
+            return (current, span, direction);
         }
     }
 

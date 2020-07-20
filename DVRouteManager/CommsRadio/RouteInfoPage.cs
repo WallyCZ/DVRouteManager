@@ -49,7 +49,35 @@ namespace DVRouteManager.CommsRadio
                 {
                     case RouteTracker.TrackingState.RightHeading:
                         {
-                            string routeInfo = $"Right heading\nRemaining: {(Module.ActiveRoute.RouteTracker.DistanceToFinish / 1000.0):0.#}km";
+                            double distance = (Module.ActiveRoute.RouteTracker.DistanceToFinish / 1000.0);
+                            if(distance < 0.0)
+                            {
+                                distance = 0.0;
+                            }
+
+                            TimeSpan elapsedTime = TimeSpan.FromSeconds(Module.ActiveRoute.RouteTracker.ElapsedTime);
+                            string elapsedTimeStr = "";
+
+                            if (elapsedTime.Minutes < 1)
+                            {
+                                elapsedTimeStr = elapsedTime.ToString("%s' s'");
+                            }
+                            else if (elapsedTime.Hours < 1)
+                            {
+                                elapsedTimeStr = elapsedTime.ToString(@"mm\:ss");
+                            }
+                            else
+                            {
+                                elapsedTimeStr = elapsedTime.ToString(@"hh\:mm\:ss");
+                            }
+
+                            string routeInfo = $"Right heading\n" +
+                                $"Remaining: {distance:0.#} km"
+#if DEBUG
+                                + $"\nSpeed: {Module.ActiveRoute.RouteTracker.RecommendedSpeed:0} km/h"
+#endif
+                                + $"\nTime: {elapsedTimeStr}"
+                                ;
                             DisplayText(routeInfo);
                         }
                         break;

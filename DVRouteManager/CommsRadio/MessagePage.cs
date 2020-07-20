@@ -7,6 +7,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using UnityAsync;
 using UnityEngine.Networking;
@@ -21,6 +22,7 @@ namespace DVRouteManager.CommsRadio
         public string message;
         public string action;
         protected bool exited = false;
+        protected CancellationTokenSource waitForTimeoutCancellation;
 
         public MessagePage(ICRMPageManager manager) :
             base(manager)
@@ -48,6 +50,7 @@ namespace DVRouteManager.CommsRadio
             float? timeout = args.GetFloat(PARAM_TIMEOUT);
             if(timeout.HasValue)
             {
+                waitForTimeoutCancellation = new CancellationTokenSource();
                 WaitForTimeout(timeout.Value);
             }
         }
@@ -56,6 +59,10 @@ namespace DVRouteManager.CommsRadio
         {
             base.OnLeave();
             exited = true;
+            if(waitForTimeoutCancellation != null)
+            {
+                waitForTimeoutCancellation.Cancel();
+            }
         }
 
         public override void OnAction()
@@ -68,9 +75,18 @@ namespace DVRouteManager.CommsRadio
 
         protected async void WaitForTimeout(float timeout)
         {
-            await new WaitForSeconds(timeout);
+            try
+            {
+                await new WaitForSeconds(timeout).ConfigureAwait(waitForTimeoutCancellation.Token);
 
-            OnAction();
+                OnAction();
+            }
+            catch (OperationCanceledException)
+            {
+                // waiting was cancelled
+            }
+
+            waitForTimeoutCancellation = null;
         }
     }
 }

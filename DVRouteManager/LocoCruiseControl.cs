@@ -217,5 +217,15 @@ namespace DVRouteManager
             return 0.0f;
         }
 
+        public static float? GetTargetSpeed()
+        {
+            if (CruiseControl != null)
+            {
+                return CruiseControl.TargetSpeed;
+            }
+
+            return null;
+        }
+
     }
 }

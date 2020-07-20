@@ -1,4 +1,5 @@
 ﻿using CommandTerminal;
+using DV;
 using DV.Logic.Job;
 using DVRouteManager.Extensions;
 using System;
@@ -35,6 +36,10 @@ namespace DVRouteManager
         private double notifyTrainEndPosition = double.MaxValue;
 
         public Trainset Trainset { get; protected set; }
+
+        public float RecommendedSpeed { get; protected set; }
+
+        public float ElapsedTime { get; protected set; }
 
         public RouteTracker(RouteTaskChain chain, bool audio)
         {
@@ -73,7 +78,7 @@ namespace DVRouteManager
             }
 
             Route = route;
-
+            ElapsedTime = 0.0f;
 
             TrackState = TrackingState.BeforeStart;
 
@@ -242,10 +247,18 @@ namespace DVRouteManager
             CarTrackPosition firstCarPosition = new CarTrackPosition();
             CarTrackPosition lastCarPosition = new CarTrackPosition();
 
+            float lastTime = Time.time;
+
             while (CoroutineShouldBeRunning)
             {
+                if (!AppUtil.IsPaused)
+                {
+                    ElapsedTime += Time.time - lastTime;
+                }
 
-                if (PlayerManager.LastLoco != null)
+                lastTime = Time.time;
+
+                if (PlayerManager.LastLoco != null && ! AppUtil.IsPaused)
                 {
                     TrainCar firstCar = Trainset.firstCar;
                     TrainCar lastCar = Trainset.lastCar;
@@ -275,7 +288,7 @@ namespace DVRouteManager
 #if DEBUG
                 yield return new WaitForSeconds(0.5f);
 #else
-                yield return null;
+                yield return new WaitForSeconds(0.1f);
 #endif
             }
 
@@ -337,20 +350,25 @@ namespace DVRouteManager
             }
 
 #if DEBUG
-            float span = (float)Mathd.Clamp01(car.span / car.track.logicTrack.length);
-            Vector3 tan = car.track.curve.GetTangentAt(span );
-            if (!car.TrackDirection)
+            float carSpeed = Mathf.Abs(car.dvCar.GetForwardSpeed());
+            float metersAhead = carSpeed * carSpeed + 50.0f;
+            var (aheadTrack, aheadSpan, direction) = car.track.GetAheadTrack(car.span, car.TrackDirection, metersAhead);
+            float span = (float)Mathd.Clamp01(aheadSpan / aheadTrack.logicTrack.length);
+            Vector3 tan = aheadTrack.curve.GetTangentAt(span );
+            if (direction)
                 tan = -tan;
             Vector2 tand = new Vector2(tan.x, tan.z);
             float angle = Mathf.Atan2(tand.y, tand.x);
 
 
 
+
             //Terminal.Log($"isOnTrack: {isOnTrack} firstCar: {car == firstCar} trackDistance: {pathData?.distanceFromStart} posFromstart: {DistanceTraveled} posToFinish: {DistanceToFinish} carTrack: {car?.track?.logicTrack.ID.FullID} carNext: {car?.trackNext?.logicTrack.ID.FullID} carMoving: {car?.moving} carVelocity: {car?.dvCar.GetVelocity().sqrMagnitude} carChangedTrack: {car?.changedTrack}  tan: {tan}");
             float angleDiff = Utils.GetAngleDifference(lastAngle, angle);
-            float speed = RailTrackExtension.AngleDiffToSpeed(angleDiff, (float) (posFromStart - lastPos));
+            RecommendedSpeed = RailTrackExtension.AngleDiffToSpeed(angleDiff, (float) (posFromStart - lastPos));
             angleDiff = angleDiff * 180f / Mathf.PI / Mathf.Abs((float)(posFromStart - lastPos));
-            Terminal.Log($"isOnTrack: {isOnTrack} car: {car.dvCar.ID} posFromstart: {DistanceTraveled} posToFinish: {DistanceToFinish} carTrack: {car?.track?.logicTrack.ID.FullID} carNext: {car?.trackNext?.logicTrack.ID.FullID} carMoving: {car?.moving} isBezier: { ! car?.track.IsCurveNotUsingConnectedBezierPoints()} tan: {tand} angle: {Mathf.Atan2(tand.y, tand.x)} magn {tand.magnitude} angleDiff {angleDiff} {speed}");
+
+            Terminal.Log($"isOnTrack: {isOnTrack} car: {car.dvCar.ID} posFromstart: {DistanceTraveled} posToFinish: {DistanceToFinish} carTrack: {car?.track?.logicTrack.ID.FullID} carNext: {car?.trackNext?.logicTrack.ID.FullID} angle: {Mathf.Atan2(tand.y, tand.x)} ahead {aheadTrack.logicTrack.ID.FullID} aheadSpan {aheadSpan} aheadDir {direction} carSpan {car.span} carDir {car.TrackDirection} angleDiff {angleDiff} {RecommendedSpeed}");
             lastAngle = angle;
             lastPos = posFromStart;
 #endif

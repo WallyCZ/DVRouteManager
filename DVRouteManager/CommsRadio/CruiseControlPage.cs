@@ -33,6 +33,8 @@ namespace DVRouteManager.CommsRadio
 
             var menus = new List<MenuItem>();
 
+            string currentSpeedSet = LocoCruiseControl.GetTargetSpeed().HasValue ? $"\n\n\nspeed {LocoCruiseControl.GetTargetSpeed():0} km/h" : "\n\n\nSpeed not set";
+
             int hash = 1;
             if ( ! LocoCruiseControl.IsSet)
             {
@@ -40,13 +42,13 @@ namespace DVRouteManager.CommsRadio
                 hash += 2;
             }
 
-            menus.Add(new MenuItem("30 km/h", "Set", () => SetCruiseControl(30.0f)));
-            menus.Add(new MenuItem("60 km/h", "Set", () => SetCruiseControl(60.0f)));
+            menus.Add(new MenuItem("30 km/h" + currentSpeedSet, "Set", () => SetCruiseControl(30.0f)));
+            menus.Add(new MenuItem("60 km/h" + currentSpeedSet, "Set", () => SetCruiseControl(60.0f)));
 
             if (LocoCruiseControl.IsSet)
             {
-                menus.Add(new MenuItem("+ 5 km/h", "Add", () => UpdateTargetSpeed(5.0f)));
-                menus.Add(new MenuItem("- 5 km/h", "Sub", () => UpdateTargetSpeed(-5.0f)));
+                menus.Add(new MenuItem("+ 5 km/h" + currentSpeedSet, "Add", () => UpdateTargetSpeed(5.0f)));
+                menus.Add(new MenuItem("- 5 km/h" + currentSpeedSet, "Sub", () => UpdateTargetSpeed(-5.0f)));
                 menus.Add(new MenuItem("Reset", "Cancel", () => ResetCruiseControl()));
                 hash += 4;
             }

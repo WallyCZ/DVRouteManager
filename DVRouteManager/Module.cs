@@ -39,8 +39,34 @@ namespace DVRouteManager
         public static LocoAI GetLocoAI(TrainCar car)
         {
             LocoAI locoAI;
-            if( ! locosAI.TryGetValue(car.logicCar.ID, out locoAI))
+            if (!locosAI.TryGetValue(car.logicCar.ID, out locoAI))
             {
+                DieselLocoSimulation dieselSim = car.GetComponent<DieselLocoSimulation>();
+                if (dieselSim != null)
+                {
+                    if (!dieselSim.engineOn)
+                    {
+                        throw new CommandException("Engine off");
+                    }
+                }
+                else
+                {
+                    ShunterLocoSimulation shunterSim = car.GetComponent<ShunterLocoSimulation>();
+                    if (shunterSim != null)
+                    {
+                        if (!shunterSim.engineOn)
+                        {
+                            throw new CommandException("Engine off");
+                        }
+
+                    }
+                    else
+                    {
+                        throw new CommandException("Loco not compatible");
+                    }
+                }
+
+                LocoControllerShunter shunterController = car.GetComponent<LocoControllerShunter>();
                 ILocomotiveRemoteControl remote = car.GetComponent<ILocomotiveRemoteControl>();
                 locoAI = new LocoAI(remote);
                 locosAI.Add(car.logicCar.ID, locoAI);
@@ -240,6 +266,15 @@ namespace DVRouteManager
                 LocoCruiseControl.ToggleCruiseControl(60.0f);
             }
 
+            if (Input.GetKeyDown(KeyCode.Comma))
+            {
+                LocoCruiseControl.UpdateTargetSpeed(-5.0f);
+            }
+
+            if (Input.GetKeyDown(KeyCode.Period))
+            {
+                LocoCruiseControl.UpdateTargetSpeed(+5.0f);
+            }
         }
 
     }
