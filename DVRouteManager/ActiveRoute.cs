@@ -36,7 +36,7 @@ namespace DVRouteManager
         {
             route = null;
             RouteTracker = null;
-            PathMapMarker.DestroyPoints();
+            PathMapMarker.DestroyAllPoints();
         }
 
         public RouteTracker RouteTracker
@@ -47,7 +47,6 @@ namespace DVRouteManager
                 if (routeTracker != null)
                 {
                     routeTracker.Dispose();
-                    routeTracker = null;
                 }
 
                 routeTracker = value;

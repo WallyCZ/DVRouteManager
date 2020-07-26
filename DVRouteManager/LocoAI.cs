@@ -68,10 +68,20 @@ namespace DVRouteManager
 
             bool couplerApproach = false;
 
+            RouteTracker.TrackingState lastState = RouteTracker.TrackState;
+
             while (running)
             {
                 float speed = Mathf.Abs(remoteControl.GetForwardSpeed() * 3.6f);
                 float acceleration = (speed - prevSpeed) / timeDelta;
+
+                bool stateChanged = false;
+
+                if(lastState != RouteTracker.TrackState)
+                {
+                    lastState = RouteTracker.TrackState;
+                    stateChanged = true;
+                }
 
                 if (couplerApproach)
                 {
@@ -107,12 +117,20 @@ namespace DVRouteManager
                 else if (RouteTracker.TrackState == RouteTracker.TrackingState.StopTrainAfterSwitch)
                 {
                     TargetSpeed = 10.0f;
-                    shouldreverse = true;
-                }
-                else if (RouteTracker.TrackState == RouteTracker.TrackingState.WrongHeading)
-                {
-                    if (speed > 3.0f && !shouldreverse)
+                    if (!shouldreverse)
                     {
+                        shouldreverse = true;
+                    }
+                }
+                else if (RouteTracker.TrackState == RouteTracker.TrackingState.WrongHeading
+                    || RouteTracker.TrackState == RouteTracker.TrackingState.ReverseTrain)
+                {
+                    if (stateChanged)
+                    {
+                        //https://www.wolframalpha.com/input/?i=InterpolatingPolynomial%5B%7B%7B5%2C+4%7D%2C+%7B100%2C+15%7D%7D%2C+x%5D
+                        int brakeLevel = 11 * ((int)speed - 5) / 95 + 4;
+                        float brakeTime = speed / 5.0f;
+                        Module.StartCoroutine(BrakePulse(brakeLevel, brakeTime));
                         TargetSpeed = 0.0f;
                         shouldreverse = true;
                     }
@@ -122,20 +140,6 @@ namespace DVRouteManager
                         yield return Module.StartCoroutine(Reverse());
                         shouldreverse = false;
                         TargetSpeed = TARGET_SPEED_DEFAULT;
-                    }
-                }
-                else if (RouteTracker.TrackState == RouteTracker.TrackingState.ReverseTrain)
-                {
-                    if (speed < 5.0f && shouldreverse)
-                    {
-                        yield return Module.StartCoroutine(Reverse());
-                        shouldreverse = false;
-                        TargetSpeed = TARGET_SPEED_DEFAULT;
-                    }
-
-                    if (shouldreverse)
-                    {
-                        TargetSpeed = 0.0f;
                     }
                 }
 
@@ -198,12 +202,28 @@ namespace DVRouteManager
                 remoteControl.UpdateThrottle(-100.0f);
                 yield return null;
             }
-            Terminal.Log($"reverse {remoteControl.GetTargetThrottle()}");
             remoteControl.UpdateReverser(direction ? ToggleDirection.DOWN : ToggleDirection.UP);
             yield return null;
-            Terminal.Log($"reverse {remoteControl.GetTargetThrottle()}");
             remoteControl.UpdateReverser(direction ? ToggleDirection.DOWN : ToggleDirection.UP);
             yield return null;
+        }
+
+        IEnumerator BrakePulse(int level, float waitTime)
+        {
+            for (int i = 0; i < level; i++)
+            {
+                remoteControl.UpdateBrake(1.0f);
+                yield return new WaitForSeconds(0.1f);
+            }
+
+            yield return new WaitForSeconds(waitTime);
+
+            for (int i = 0; i < level + 1; i++)
+            {
+                remoteControl.UpdateBrake(-1.0f);
+                yield return new WaitForSeconds(0.1f);
+            }
+
         }
 
     }

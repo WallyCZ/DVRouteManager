@@ -134,6 +134,7 @@
     <Compile Include="CommsRadio\Selector.cs" />
     <Compile Include="Extensions\StringExtension.cs" />
     <Compile Include="Internals\SimpleJson.cs" />
+    <Compile Include="Settings.cs" />
     <Compile Include="UnityAsync\Awaiters\AsyncOperationAwaiter.cs" />
     <Compile Include="UnityAsync\Awaiters\IEnumeratorAwaiter.cs" />
     <Compile Include="UnityAsync\Awaiters\ResourceRequestAwaiter.cs" />
@@ -170,7 +171,7 @@ IF EXIST %25pdb2mdb%25 %25pdb2mdb%25 DVRouteManager.dll
 
 if not exist "$(DVInstallPath)Mods\$(SolutionName)\" mkdir "$(DVInstallPath)Mods\$(SolutionName)\"
 copy $(TargetPath) "$(DVInstallPath)Mods\$(SolutionName)\"
-copy $(SolutionDir)Info.json "$(DVInstallPath)Mods\$(SolutionName)\"
+REM copy $(SolutionDir)Info.json "$(DVInstallPath)Mods\$(SolutionName)\"
 if $(Configuration) == Release (
 REM  powershell Compress-Archive -DestinationPath '$(SolutionDir)$(SolutionName).zip' -Path (Get-ChildItem -Path '$(DVInstallPath)Mods\$(SolutionName)\' -Exclude $exclude) -Force
    powershell New-Item -Force -ItemType Directory $env:TEMP/$(SolutionName)

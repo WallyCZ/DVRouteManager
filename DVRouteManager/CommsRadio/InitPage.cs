@@ -43,7 +43,7 @@ namespace DVRouteManager.CommsRadio
 
             try
             {
-                DisplayText("Downloading update...", "");
+                DisplayText("Downloading update...");
 
                 www = UnityWebRequest.Get(Module.VersionForUpdate.downloadUrl);
                 www.downloadHandler = new DownloadHandlerBuffer();
@@ -65,7 +65,7 @@ namespace DVRouteManager.CommsRadio
                 {
                     if (!www.isHttpError && !www.isNetworkError)
                     {
-                        DisplayText("Extracting update...", "");
+                        DisplayText("Extracting update...");
                         string outFile = Path.GetTempFileName();
 
                         try
@@ -85,8 +85,11 @@ namespace DVRouteManager.CommsRadio
                                 System.IO.File.Move(file, renameTo);
                             }
 
-                            (new Unzip(outFile)).ExtractToDirectory(
-                                Path.GetDirectoryName(assemblyPath)); //get parent directory
+                            using (Unzip unzip = new Unzip(outFile))
+                            {
+                                unzip.ExtractToDirectory(
+                                    Path.GetDirectoryName(assemblyPath)); //get parent directory
+                            }
 
                             DisplayText("Done, update applies after game restart", "OK");
 

@@ -45,7 +45,7 @@ namespace DVRouteManager.CommsRadio
                             new CommandArg() { String = "to" },
                             new CommandArg() { String = trackPage.SelectedTrack }
                 };
-                BuildRoute(args);
+                BuildRoute(args, this);
             });
         }
 
@@ -97,14 +97,15 @@ namespace DVRouteManager.CommsRadio
                     new CommandArg() { String = jobName }
                     };
             }
-            BuildRoute(args);
+
+            BuildRoute(args, this);
         }
 
-        private async void BuildRoute(CommandArg[] args)
+        public static async void BuildRoute(CommandArg[] args, CRMPage page)
         {
             try
             {
-                DisplayText("Computing route", "");
+                page.DisplayText("Computing route", "");
 
                 await RouteCommand.DoCommand(args);
 
@@ -121,21 +122,21 @@ namespace DVRouteManager.CommsRadio
                     if (Module.ActiveRoute.Route.Reverses.Count > 0)
                         routeInfo += $"\nReverses: {Module.ActiveRoute.Route.Reverses.Count}";
 
-                    RedirectToMessagePage(routeInfo, "MENU");
+                    page.RedirectToMessagePage(routeInfo, "MENU");
                 }
                 else
                 {
-                    RedirectToMessagePage("Route not found", "MENU");
+                    page.RedirectToMessagePage("Route not found", "MENU");
                 }
             }
             catch (CommandException exc)
             {
-                RedirectToMessagePage(exc.Message, "MENU");
+                page.RedirectToMessagePage(exc.Message, "MENU");
             }
             catch (Exception exc)
             {
                 Terminal.Log(exc.Message + ": " + exc.StackTrace);
-                RedirectToMessagePage("Error in building path, see console", "MENU");
+                page.RedirectToMessagePage("Error in building path, see console", "MENU");
             }
         }
     }

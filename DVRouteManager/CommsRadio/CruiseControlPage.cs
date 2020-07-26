@@ -24,6 +24,13 @@ namespace DVRouteManager.CommsRadio
         {
         }
 
+        private void LocoCruiseControl_OnCruiseControlChange(object sender, EventArgs e)
+        {
+            SetupSelector();
+            RestoreSelectorIndex();
+            PrintCurrentSelector();
+        }
+
         protected override List<MenuItem> CreateMenuItems()
         {
             if(menuSelector != null)
@@ -33,7 +40,7 @@ namespace DVRouteManager.CommsRadio
 
             var menus = new List<MenuItem>();
 
-            string currentSpeedSet = LocoCruiseControl.GetTargetSpeed().HasValue ? $"\n\n\nspeed {LocoCruiseControl.GetTargetSpeed():0} km/h" : "\n\n\nSpeed not set";
+            string currentSpeedSet = LocoCruiseControl.GetTargetSpeed().HasValue ? $"\n\n\nSet to {LocoCruiseControl.GetTargetSpeed():0} km/h" : "\n\n\nSpeed not set";
 
             int hash = 1;
             if ( ! LocoCruiseControl.IsSet)
@@ -73,26 +80,43 @@ namespace DVRouteManager.CommsRadio
         private void SetCruiseControl(float? speed = null)
         {
             float speedSet = LocoCruiseControl.SetCruiseControl(speed);
-            CallMessageSubPage($"Speed set to {speedSet:0.#} km/h", "", MESSAGE_TIMEOUT);
+            //CallMessageSubPage($"Speed set to {speedSet:0.#} km/h", "", MESSAGE_TIMEOUT);
         }
 
         private void UpdateTargetSpeed(float speedDiff)
         {
             float speed = LocoCruiseControl.UpdateTargetSpeed(speedDiff);
-            CallMessageSubPage($"Speed set to {speed:0.#} km/h", "", MESSAGE_TIMEOUT);
+            //CallMessageSubPage($"Speed set to {speed:0.#} km/h", "", MESSAGE_TIMEOUT);
         }
 
         public override void OnEnter(CRMPage previousPage, CRMPageArgs args)
         {
+            Terminal.Log("CruiseControlPage.OnEnter");
             SetupSelector();
 
+            RestoreSelectorIndex();
+
+            LocoCruiseControl.OnCruiseControlChange += LocoCruiseControl_OnCruiseControlChange;
+
+            base.OnEnter(previousPage, args);
+        }
+
+        private void RestoreSelectorIndex()
+        {
             //try to return previous selector index
             for (int i = 0; i < lastSelectorIndex; i++)
             {
                 menuSelector.MoveNextRewind();
             }
+        }
 
-            base.OnEnter(previousPage, args);
+        public override void OnLeave()
+        {
+            Terminal.Log("CruiseControlPage.OnLeave");
+            LocoCruiseControl.OnCruiseControlChange -= LocoCruiseControl_OnCruiseControlChange;
+            base.OnLeave();
         }
     }
+
+    
 }

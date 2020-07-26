@@ -26,7 +26,7 @@ namespace DVRouteManager
 
         }
 
-        private bool CoroutineShouldBeRunning = false;
+        private bool Running = false;
         private bool audio;
         public Route Route { get; private set;}
 
@@ -67,12 +67,7 @@ namespace DVRouteManager
         {
             Trainset = trainset;
 
-            if (route == null)
-            {
-                throw new ArgumentNullException(nameof(route));
-            }
-
-            if (route.Path.Count == 0)
+            if (route == null || route.Path.Count == 0)
             {
                 throw new ArgumentNullException(nameof(route));
             }
@@ -82,7 +77,7 @@ namespace DVRouteManager
 
             TrackState = TrackingState.BeforeStart;
 
-            if (!CoroutineShouldBeRunning)
+            if (!Running)
             {
                 Module.StartCoroutine(PositionUpdate());
             }
@@ -242,55 +237,58 @@ namespace DVRouteManager
 
         protected IEnumerator PositionUpdate()
         {
-            CoroutineShouldBeRunning = true;
+            Running = true;
 
             CarTrackPosition firstCarPosition = new CarTrackPosition();
             CarTrackPosition lastCarPosition = new CarTrackPosition();
 
             float lastTime = Time.time;
 
-            while (CoroutineShouldBeRunning)
+            while (Running)
             {
-                if (!AppUtil.IsPaused)
-                {
-                    ElapsedTime += Time.time - lastTime;
-                }
+                try
+                { 
+                    if (!AppUtil.IsPaused)
+                    {
+                        ElapsedTime += Time.time - lastTime;
+                    }
 
-                lastTime = Time.time;
+                    lastTime = Time.time;
 
-                if (PlayerManager.LastLoco != null && ! AppUtil.IsPaused)
-                {
-                    TrainCar firstCar = Trainset.firstCar;
-                    TrainCar lastCar = Trainset.lastCar;
+                    if (PlayerManager.LastLoco != null && ! AppUtil.IsPaused)
+                    {
+                        TrainCar firstCar = Trainset.firstCar;
+                        TrainCar lastCar = Trainset.lastCar;
 
-                    (Bogie firstBoogie, Bogie lastBogie) = Utils.GetBogiesWithMaxDistance(firstCar, lastCar);
+                        (Bogie firstBoogie, Bogie lastBogie) = Utils.GetBogiesWithMaxDistance(firstCar, lastCar);
 
-                    firstCarPosition.dvCar = firstCar;
-                    firstCarPosition.UpdatePosition(firstBoogie);
+                        firstCarPosition.dvCar = firstCar;
+                        firstCarPosition.UpdatePosition(firstBoogie);
 
-                    lastCarPosition.dvCar = lastCar;
-                    lastCarPosition.UpdatePosition(lastBogie);
+                        lastCarPosition.dvCar = lastCar;
+                        lastCarPosition.UpdatePosition(lastBogie);
 
 #if DEBUG2
-                    Terminal.Log($"first track {firstCarPosition.track?.logicTrack.ID.FullID} next {firstCarPosition.trackNext?.logicTrack.ID.FullID} span {firstCarPosition.span}");
-                    Terminal.Log($"last track {lastCarPosition.track?.logicTrack.ID.FullID} next {lastCarPosition.trackNext?.logicTrack.ID.FullID} span {lastCarPosition.span}");
+                        Terminal.Log($"first track {firstCarPosition.track?.logicTrack.ID.FullID} next {firstCarPosition.trackNext?.logicTrack.ID.FullID} span {firstCarPosition.span}");
+                        Terminal.Log($"last track {lastCarPosition.track?.logicTrack.ID.FullID} next {lastCarPosition.trackNext?.logicTrack.ID.FullID} span {lastCarPosition.span}");
 #endif
 
-                    try
-                    {
                         UpdateCurrentTrack(firstCarPosition, lastCarPosition);
                     }
-                    catch (Exception exc)
-                    {
-                        Terminal.Log("UpdateCurrentTrack " + exc.Message + " " + exc.StackTrace);
-                    }
                 }
+                catch (Exception exc)
+                {
+                    Terminal.Log("PositionUpdate " + exc.Message + " " + exc.StackTrace);
+                }
+
 #if DEBUG
                 yield return new WaitForSeconds(0.5f);
 #else
                 yield return new WaitForSeconds(0.1f);
 #endif
             }
+
+            Running = false;
 
 #if DEBUG
             Terminal.Log("RouteTracker.PositionUpdate exit");
@@ -571,7 +569,7 @@ namespace DVRouteManager
 #if DEBUG
             Terminal.Log("RouteTracker.Dispose");
 #endif
-            CoroutineShouldBeRunning = false;
+            Running = false;
         }
     }
 }

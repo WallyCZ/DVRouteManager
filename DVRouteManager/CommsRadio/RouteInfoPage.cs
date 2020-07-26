@@ -1,5 +1,6 @@
 ﻿using CommandTerminal;
 using DV;
+using DV.Logic.Job;
 using DVRouteManager.Internals;
 using System;
 using System.Collections;
@@ -26,10 +27,33 @@ namespace DVRouteManager.CommsRadio
             return new List<MenuItem>()
             {
                 new MenuItem("Route tracker", "Show", () => ShowRouteTrackerInfo()),
+                new MenuItem("Train info", "Show", () => ShowTrainInfo()),
+                new MenuItem("Change route direction", "Change", () => ChangeRouteDirection()),
                 new MenuItem("Train end alarm", "Set", () => NotifyTrainEnd()),
                 new MenuItem("Clear route", "Clear", () => ClearRoute()),
                 GetExitMenu()
             };
+        }
+
+        private void ShowTrainInfo()
+        {
+            if (Module.ActiveRoute.IsSet)
+            {
+                var carsCount = Module.ActiveRoute.RouteTracker.Trainset.cars.Count;
+                var trainLength = Module.ActiveRoute.RouteTracker.Trainset.cars.Sum(c => c.logicCar.length);
+                var trainWeight = Module.ActiveRoute.RouteTracker.Trainset.cars.Sum(c => c.logicCar.carOnlyMass + c.logicCar.LoadedCargoAmount * CargoTypes.GetCargoUnitMass(c.logicCar.CurrentCargoTypeInCar));
+                CallMessageSubPage($"Cars: {carsCount}\nTrain length: {trainLength:0} m\nTrain weight: {trainWeight * 0.001f:0} t", "Back");
+            }
+        }
+
+        private void ChangeRouteDirection()
+        {
+            CommandArg[] args = new CommandArg[]
+            {
+                new CommandArg() { String = "opposite" }
+            };
+
+            NewRoutePage.BuildRoute(args, this);
         }
 
         private async void ShowRouteTrackerInfo()

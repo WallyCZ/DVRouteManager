@@ -23,8 +23,9 @@ namespace DVRouteManager
     static class Module
     {
         public static UnityModManager.ModEntry mod;
+        public static Settings settings;
 
-        public static ActiveRoute ActiveRoute { get; } = new ActiveRoute();
+        public static ActiveRoute ActiveRoute { get; private set; }
 
         public static AudioClip stopTrainClip { get; private set; }
         public static AudioClip trainEnd { get; private set; }
@@ -32,7 +33,6 @@ namespace DVRouteManager
         public static AudioClip offClip { get; private set; }
         public static AudioClip onClip { get; private set; }
         public static AudioClip setClip { get; private set; }
-
         public static AudioSource generalAudioSource { get; private set; }
 
         private static Dictionary<string, LocoAI> locosAI = new Dictionary<string, LocoAI>();
@@ -82,14 +82,17 @@ namespace DVRouteManager
         }
         public static VersionInfo VersionForUpdate { get; private set; }
 
-
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("CodeQuality", "IDE0051:Remove unused private members", Justification = "<Pending>")]
         static bool Load(UnityModManager.ModEntry modEntry)
         {
             try
             {
+                settings = Settings.Load<Settings>(modEntry);
                 mod = modEntry;
                 mod.OnToggle = OnToggle;
                 mod.OnUpdate = OnUpdate;
+                mod.OnGUI = OnGUI;
+                mod.OnSaveGUI = OnSaveGUI;
 
                 stopTrainClip = AudioUtils.LoadAudioClip("audio\\stoptrain.wav", "stoptrain");
                 trainEnd = AudioUtils.LoadAudioClip("audio\\trainend.wav", "trainend");
@@ -103,6 +106,8 @@ namespace DVRouteManager
 
                 AsyncManager.Initialize();
 
+                 ActiveRoute = new ActiveRoute();
+
             }
             catch (Exception exc)
             {
@@ -110,6 +115,16 @@ namespace DVRouteManager
             }
 
             return true;
+        }
+
+        private static void OnSaveGUI(ModEntry modEntry)
+        {
+            settings.Save(modEntry);
+        }
+
+        private static void OnGUI(ModEntry modEntry)
+        {
+            settings.Draw(modEntry);
         }
 
         public static IEnumerator CheckUpdates()
@@ -246,32 +261,32 @@ namespace DVRouteManager
         }
         private static void OnUpdate(ModEntry arg1, float arg2)
         {
-            if (Module.ActiveRoute.IsSet && Module.ActiveRoute.RouteTracker != null && Input.GetKeyDown(KeyCode.N))
+            if (Module.ActiveRoute.IsSet && Module.ActiveRoute.RouteTracker != null && Module.settings.TrainEndAlarm.Down())
             {
                 Module.ActiveRoute.RouteTracker.NotifyTrainEnd();
             }
 
-            if (Input.GetKeyDown(KeyCode.C))
+            if (Module.settings.CruiseControlToggle.Down())
             {
                 LocoCruiseControl.ToggleCruiseControl();
             }
 
-            if (Input.GetKeyDown(KeyCode.V))
+            if (Module.settings.CruiseControl30.Down())
             {
                 LocoCruiseControl.ToggleCruiseControl(30.0f);
             }
 
-            if (Input.GetKeyDown(KeyCode.B))
+            if (Module.settings.CruiseControl60.Down())
             {
                 LocoCruiseControl.ToggleCruiseControl(60.0f);
             }
 
-            if (Input.GetKeyDown(KeyCode.Comma))
+            if (Module.settings.CruiseControlMinus.Down() )
             {
                 LocoCruiseControl.UpdateTargetSpeed(-5.0f);
             }
 
-            if (Input.GetKeyDown(KeyCode.Period))
+            if (Module.settings.CruiseControlPlus.Down())
             {
                 LocoCruiseControl.UpdateTargetSpeed(+5.0f);
             }

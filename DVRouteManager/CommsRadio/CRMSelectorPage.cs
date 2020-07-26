@@ -25,7 +25,10 @@ namespace DVRouteManager.CommsRadio
 
             menuSelector = new Selector<MenuItem>(CreateMenuItems());
 
-            menuSelector.MoveNextRewind();
+            if (menuSelector.Current == null)
+            {
+                menuSelector.MoveNextRewind();
+            }
 
             if(menuSelector.Current == null)
             {
@@ -48,7 +51,8 @@ namespace DVRouteManager.CommsRadio
             {
                 SetupSelector();
             }
-            DisplayText(menuSelector.Current.displayText, menuSelector.Current.actionName);
+
+            PrintCurrentSelector();
         }
 
         public override bool ButtonACustomAction()
@@ -62,6 +66,11 @@ namespace DVRouteManager.CommsRadio
             menuSelector.MovePrevRewind();
             DisplayText(menuSelector.Current.displayText, menuSelector.Current.actionName);
             return true;
+        }
+
+        public virtual void PrintCurrentSelector()
+        {
+            DisplayText(menuSelector.Current.displayText, menuSelector.Current.actionName);
         }
 
     }

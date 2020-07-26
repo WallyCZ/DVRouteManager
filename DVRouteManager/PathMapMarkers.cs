@@ -1,29 +1,64 @@
 ﻿using CommandTerminal;
-using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
-using System.Text;
-using System.Threading.Tasks;
 using UnityEngine;
 
 namespace DVRouteManager
 {
     public class PathMapMarkers
     {
-        private List<GameObject> points = new List<GameObject>();
+        private List<(double lengthToFinish, GameObject gameObject)> points = new List<(double, GameObject)>();
+        private Route Route;
+        private bool running = false;
 
-        public void DestroyPoints()
+        public PathMapMarkers()
+        {
+            Module.StartCoroutine(PathMapCoroutine());
+        }
+
+        IEnumerator PathMapCoroutine()
+        {
+            running = true;
+            while (running)
+            {
+                if(Route != null && Module.ActiveRoute?.RouteTracker?.Route == Route)
+                {
+                    DestroyPoints(Module.ActiveRoute.RouteTracker.DistanceToFinish);
+                }
+
+                yield return new WaitForSeconds(3.0f);
+            }
+        }
+
+        public void DestroyAllPoints()
         {
             foreach (var point in points)
             {
-                UnityEngine.Object.Destroy(point);
+                UnityEngine.Object.Destroy(point.gameObject);
             }
+            Route = null;
+        }
+
+        public void DestroyPoints(double lengthToFinish)
+        {
+            var toRemove = points.Where(point => point.lengthToFinish > lengthToFinish);
+
+            int num = 0;
+            foreach (var point in toRemove)
+            {
+                UnityEngine.Object.Destroy(point.gameObject);
+                num++;
+            }
+
+            points.RemoveAll(point => point.lengthToFinish > lengthToFinish);
         }
 
         public void DrawPathToMap(Route route)
         {
-            DestroyPoints();
+            DestroyAllPoints();
+            Route = route;
 
             WorldMap map = (WorldMap)Resources.FindObjectsOfTypeAll(typeof(WorldMap)).FirstOrDefault();
             MapMarkersController mapController = (MapMarkersController)Resources.FindObjectsOfTypeAll(typeof(MapMarkersController)).FirstOrDefault();
@@ -67,7 +102,7 @@ namespace DVRouteManager
 
                     mr.material.color = color;
 
-                    points.Add(point);
+                    points.Add( (route.Length - next, point ));
 
                     next += step;
                 }

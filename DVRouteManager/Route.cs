@@ -1,5 +1,6 @@
 ﻿using CommandTerminal;
 using DV.Logic.Job;
+using DVRouteManager.Extensions;
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -10,6 +11,13 @@ using UnityEngine;
 
 namespace DVRouteManager
 {
+    public enum ReversingStrategy
+    {
+        NoReversing,
+        OnlyIfNeeded,
+        ChooseBest
+    }
+
     public class Route
     {
         public const double REVERSE_SECTOR_LENGTH = 10.0;
@@ -24,6 +32,13 @@ namespace DVRouteManager
         public RailTrack SecondTrack { get => Path.Skip(1).FirstOrDefault(); }
         public RailTrack LastTrack { get => Path.LastOrDefault(); }
 
+        public Trainset Trainset { get; private set; }
+
+        public Route(List<RailTrack> path, Track destination, Trainset trainset)
+            : this(path, destination)
+        {
+            Trainset = trainset;
+        }
         public Route(List<RailTrack> path, Track destination)
         {
             this.Path = path ?? throw new ArgumentNullException(nameof(path));
@@ -196,13 +211,13 @@ namespace DVRouteManager
 #if DEBUG
                         Terminal.Log($"OutJunction track: {walkData.currentTrack.logicTrack.ID.FullID} nexttrack {walkData.nextTrack.logicTrack.ID.FullID} inbranch {walkData.currentTrack.outJunction.inBranch.track.logicTrack.ID.FullID} outbranches {branches} selectedBranch {walkData.currentTrack.outJunction.selectedBranch}");
 #endif
-                    if ( !junctionsForReversing.Contains(walkData.currentTrack.outJunction) && SwitchJunctionIfNeeded(walkData.currentTrack, walkData.nextTrack, walkData.currentTrack.outJunction))
+                    if (!junctionsForReversing.Contains(walkData.currentTrack.outJunction) && SwitchJunctionIfNeeded(walkData.currentTrack, walkData.nextTrack, walkData.currentTrack.outJunction))
                     {
                         count++;
                     }
                 }
 
-                if(reversingJunction != null)
+                if (reversingJunction != null)
                 {
 #if DEBUG
                     Terminal.Log($"reversing junction {reversingJunction.GetInstanceID()}");
@@ -296,6 +311,65 @@ namespace DVRouteManager
 
             return result;
         }
+
+        public async Task<Route> FindOppositeRoute()
+        {
+            List<TrackTransition> trackTransitions = new List<TrackTransition>();
+
+            trackTransitions.Add(new TrackTransition() { track = FirstTrack, nextTrack = SecondTrack });
+
+            return await Route.FindRoute(FirstTrack.logicTrack, LastTrack.logicTrack, Module.settings.ReversingStrategy, Trainset, trackTransitions);
+        }
+
+        public async static Task<Route> FindRoute(Track begin, Track end, ReversingStrategy reversingStrategy, Trainset trainset, List<TrackTransition> trackTransitions = null)
+        {
+            PathFinder pathFinder = new PathFinder(begin, end);
+            Route route = await FindRoute(begin, end, trainset, false, trackTransitions);
+
+            if (reversingStrategy != ReversingStrategy.NoReversing && (route == null || reversingStrategy == ReversingStrategy.ChooseBest))
+            {
+#if DEBUG
+                Terminal.Log($"Trying path with allowed reversing");
+#endif
+                var routeWithReversing = await FindRoute(begin, end, trainset, true, trackTransitions);
+
+                if (routeWithReversing != null)
+                {
+                    Terminal.Log($"withoutreversing: {route?.Length} withReversing: {routeWithReversing.Length}");
+
+                    route = (route == null || route.Length > routeWithReversing.Length) ? routeWithReversing : route;
+                }
+            }
+
+            if (route == null)
+            {
+                throw new CommandException($"Route not found");
+            }
+
+            Terminal.Log($"Found {route}");
+
+            return route;
+        }
+
+        private async static Task<Route> FindRoute(Track begin, Track end, Trainset trainset, bool allowReverses, List<TrackTransition> trackTransitions = null)
+        {
+            PathFinder pathFinder = new PathFinder(begin, end);
+
+            double consistLength = 30.0;
+
+            if (trainset != null)
+            {
+                consistLength = trainset.Length();
+            }
+
+            var path = await pathFinder.FindPath(allowReverses, consistLength, trackTransitions);
+
+            if (path == null)
+                return null;
+
+            return new Route(path, end, trainset);
+        }
+
 
     }
 

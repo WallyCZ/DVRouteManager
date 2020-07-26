@@ -35,7 +35,16 @@ namespace DVRouteManager.CommsRadio
             this._items = list;
         }
 
-        public T Current => _items.ElementAt(Index);
+        public T Current
+        {
+            get
+            {
+                if (Index < 0 || Index >= _items.Count)
+                    return default(T);
+
+                return _items.ElementAt(Index);
+            }
+        }
 
         public int Index { get; private set; } = -1;
 

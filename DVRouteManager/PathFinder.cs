@@ -282,7 +282,7 @@ namespace DVRouteManager
         }
 
         // Return a List of Locations representing the found path
-        public async Task<Route> FindPath(bool allowReverse, double consistLength, List<TrackTransition> bannedTransitions)
+        public async Task<List<RailTrack>> FindPath(bool allowReverse, double consistLength, List<TrackTransition> bannedTransitions)
         {
             List<RailTrack> path = new List<RailTrack>();
 
@@ -319,8 +319,8 @@ namespace DVRouteManager
             }
             
             path.Reverse();
-            
-            return new Route(path, goal.logicTrack);
+
+            return path;
         }
     }
 }

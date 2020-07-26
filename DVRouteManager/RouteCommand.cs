@@ -16,12 +16,6 @@ using UnityEngine.Assertions.Must;
 namespace DVRouteManager
 {
 
-    public enum ReversingStrategy
-    {
-        Forbiden,
-        ChooseBest
-    }
-
     public class CommandException : Exception
     {
         public CommandException(string message) : base(message)
@@ -198,10 +192,35 @@ namespace DVRouteManager
                     throw new CommandException("start track or goal track not found");
                 }
 
-                await FindAndSwitch(startTrack.logicTrack, goalTrack.logicTrack, ReversingStrategy.ChooseBest, trainset);
+                await FindAndSwitch(startTrack.logicTrack, goalTrack.logicTrack, Module.settings.ReversingStrategy, trainset);
 
                 tracker.SetRoute(Module.ActiveRoute.Route, trainset);
                 Module.ActiveRoute.RouteTracker = tracker;
+            }
+            else if (args[0].String == "opposite")
+            {
+                if ( ! Module.ActiveRoute.IsSet)
+                {
+                    throw new CommandException("No route active");
+                }
+
+
+                var route = await Module.ActiveRoute.Route.FindOppositeRoute();
+
+                if (route != null)
+                {
+
+                    Module.ActiveRoute.Route = route;
+                    route.AdjustSwitches();
+
+                    Module.ActiveRoute.RouteTracker.SetRoute(route, route.Trainset);
+
+                    Terminal.Log($"Route {route.Length} {route?.SecondTrack?.logicTrack.ID.FullDisplayID}");
+                }
+                else
+                {
+                    throw new CommandException("Opposite route could not be found");
+                }
             }
             else if (args[0].String == "clear")
             {
@@ -277,7 +296,7 @@ namespace DVRouteManager
 
                 Track startTrack = trainCar.trainset.firstCar.Bogies[0].track.logicTrack;
 
-                var route = await FindRoute(startTrack, tracker.CurrentTask.DestinationTrack, ReversingStrategy.ChooseBest, trainCar.trainset);
+                var route = await Route.FindRoute(startTrack, tracker.CurrentTask.DestinationTrack, ReversingStrategy.ChooseBest, trainCar.trainset);
 
                 tracker.SetRoute(route, trainCar.trainset);
 
@@ -303,7 +322,7 @@ namespace DVRouteManager
                 throw new CommandException("Empty end");
             }
 
-            var route = await FindRoute(begin, end, reversingStrategy, trainset);
+            var route = await Route.FindRoute(begin, end, reversingStrategy, trainset);
             if (route == null)
             {
                 Module.ActiveRoute.ClearRoute();
@@ -314,46 +333,6 @@ namespace DVRouteManager
                 Module.ActiveRoute.Route = route;
                 route.AdjustSwitches();
             }
-        }
-
-        private async static Task<Route> FindRoute(Track begin, Track end, ReversingStrategy reversingStrategy, Trainset trainset)
-        {
-            List<TrackTransition> trackTransitions = null;
-
-            double consistLength = 30.0;
-
-            if(trainset != null)
-            {
-                consistLength = trainset.Length();
-            }
-
-
-            PathFinder pathFinder = new PathFinder(begin, end);
-            Route route = await pathFinder.FindPath(false, consistLength, trackTransitions);
-
-            if (route == null || reversingStrategy == ReversingStrategy.ChooseBest)
-            {
-#if DEBUG
-                Terminal.Log($"Trying path with allowed reversing");
-#endif
-                var routeWithReversing = await pathFinder.FindPath(true, consistLength, trackTransitions);
-
-                if (routeWithReversing != null)
-                {
-                    Terminal.Log($"withoutreversing: {route?.Length} withReversing: {routeWithReversing.Length}");
-
-                    route = (route == null || route.Length > routeWithReversing.Length) ? routeWithReversing : route;
-                }
-            }
-
-            if(route == null)
-            {
-                throw new CommandException($"Route not found");
-            }
-
-            Terminal.Log($"Found {route}");
-
-            return route;
         }
 
     }

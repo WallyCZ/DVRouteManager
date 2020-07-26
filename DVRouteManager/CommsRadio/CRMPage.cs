@@ -49,7 +49,7 @@ namespace DVRouteManager.CommsRadio
             return ButtonBehaviourType.Regular;
         }
 
-        protected void DisplayText(string message, string action = "")
+        internal void DisplayText(string message, string action = "")
         {
             Manager.DisplayText(message, action);
         }
@@ -69,7 +69,7 @@ namespace DVRouteManager.CommsRadio
             SetPage(typeof(MainPage));
         }
 
-        protected void RedirectToMessagePage(string message, string action, float? timeout = null)
+        internal void RedirectToMessagePage(string message, string action, float? timeout = null)
         {
             CRMPageArgs args = new CRMPageArgs();
             args.AddString(MessagePage.PARAM_MESSAGE, message);
@@ -83,7 +83,7 @@ namespace DVRouteManager.CommsRadio
             SetPage(typeof(MessagePage), args);
         }
 
-        protected void CallMessageSubPage(string message, string action, float? timeout = null, Action<CRMPage> returnAction = null)
+        internal void CallMessageSubPage(string message, string action, float? timeout = null, Action<CRMPage> returnAction = null)
         {
             CRMPageArgs args = new CRMPageArgs();
             args.AddString(MessagePage.PARAM_MESSAGE, message);
