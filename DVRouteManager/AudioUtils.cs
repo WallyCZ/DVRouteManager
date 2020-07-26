@@ -14,15 +14,24 @@ namespace DVRouteManager
 
         public static AudioClip LoadAudioClip(string fileName, string clipName)
         {
-            string path = Path.Combine(Path.GetDirectoryName(typeof(AudioUtils).Assembly.Location), fileName);
+            try
+            {
+                string path = Path.Combine(Path.GetDirectoryName(typeof(AudioUtils).Assembly.Location), fileName);
 
-            WAV wav = new WAV( path );
+                WAV wav = new WAV(path);
 
-            AudioClip audioClip =  AudioClip.Create(clipName, wav.SampleCount, 1, wav.Frequency, false);
+                AudioClip audioClip = AudioClip.Create(clipName, wav.SampleCount, 1, wav.Frequency, false);
 
-            audioClip.SetData(wav.LeftChannel, 0);
+                audioClip.SetData(wav.LeftChannel, 0);
 
-            return audioClip;
+                return audioClip;
+            }
+            catch(Exception exc)
+            {
+                Terminal.Log(exc.Message);
+            }
+
+            return null;
         }
 
         public class WAV

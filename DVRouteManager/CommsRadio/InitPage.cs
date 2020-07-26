@@ -68,6 +68,8 @@ namespace DVRouteManager.CommsRadio
                         DisplayText("Extracting update...");
                         string outFile = Path.GetTempFileName();
 
+                        List<(string from, string to)> renamed = new List<(string, string)>();
+
                         try
                         {
                             File.WriteAllBytes(outFile, www.downloadHandler.data);
@@ -83,6 +85,7 @@ namespace DVRouteManager.CommsRadio
                                 string renameTo = file + ".old";
                                 File.Delete(renameTo);
                                 System.IO.File.Move(file, renameTo);
+                                renamed.Add((file, renameTo));
                             }
 
                             using (Unzip unzip = new Unzip(outFile))
@@ -94,6 +97,16 @@ namespace DVRouteManager.CommsRadio
                             DisplayText("Done, update applies after game restart", "OK");
 
                             updateFinished = true;
+                        }
+                        catch(Exception exc)
+                        {
+                            Terminal.Log(exc.Message + ": " + exc.StackTrace);
+
+                            //restore renamed files
+                            foreach (var renamedFile in renamed)
+                            {
+                                System.IO.File.Move(renamedFile.to, renamedFile.from);
+                            }
                         }
                         finally
                         {

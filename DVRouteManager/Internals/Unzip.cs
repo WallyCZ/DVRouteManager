@@ -272,11 +272,11 @@ namespace DVRouteManager.Internals
 		private Entry GetEntry(string fileName)
 		{
 			fileName = fileName.Replace("\\", "/").Trim().TrimStart('/');
-			var entry = Entries.FirstOrDefault(e => e.Name == fileName);
+			var entry = Entries.FirstOrDefault(e => e.Name.Replace("\\", "/").Trim().TrimStart('/') == fileName);
 
 			if (entry == null)
 			{
-				throw new FileNotFoundException("File not found in the archive: " + fileName);
+				throw new FileNotFoundException("File not found in the archive: " + fileName + " AllEntries: " + string.Join(";", Entries.Select(e => e.Name).ToArray()));
 			}
 
 			return entry;
