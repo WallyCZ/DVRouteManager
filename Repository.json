@@ -2,8 +2,8 @@
     "Releases": [
         {
             "Id": "DVRouteManager",
-            "Version": "0.3.0",
-            "DownloadUrl": "https://github.com/WallyCZ/DVRouteManager/releases/download/0.3.0/DVRouteManager.zip"
+            "Version": "0.3.1",
+            "DownloadUrl": "https://github.com/WallyCZ/DVRouteManager/releases/download/0.3.1/DVRouteManager.zip"
         }
     ]
 }

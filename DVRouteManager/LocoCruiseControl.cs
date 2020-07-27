@@ -18,7 +18,7 @@ namespace DVRouteManager
 
         private static LocoCruiseControl CruiseControl;
 
-        public static bool IsSet { get => CruiseControl != null || ! CruiseControl.Running; }
+        public static bool IsSet { get => CruiseControl != null && CruiseControl.Running; }
         protected bool Running { get => running; }
 
         public LocoCruiseControl(ILocomotiveRemoteControl remoteControl)

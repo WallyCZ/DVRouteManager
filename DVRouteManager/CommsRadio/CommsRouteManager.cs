@@ -110,24 +110,36 @@ namespace DVRouteManager.CommsRadio
 
         public void SetPage(Type nextPageType, CRMPageArgs args = null, CRMPage prevPage = null)
         {
-            CRMPage nextPage;
-
-            if ( ! knownPages.TryGetValue(nextPageType, out nextPage))
+            try
             {
-                Terminal.Log($"Unknown page {nextPageType}");
-                return;
+                CRMPage nextPage;
+
+                if (!knownPages.TryGetValue(nextPageType, out nextPage))
+                {
+                    Terminal.Log($"Unknown page {nextPageType}");
+                    return;
+                }
+                if (currentPage != null)
+                {
+                    currentPage.OnLeave();
+                }
+
+                CRMPage lastPage = prevPage ?? currentPage;
+                currentPage = nextPage;
+
+                currentPage.OnEnter(lastPage, args ?? new CRMPageArgs());
+
+                this.ButtonBehaviour = currentPage.GetButtonBehaviour();
             }
-            if (currentPage != null)
+            catch (Exception exc)
             {
-                currentPage.OnLeave();
+                Terminal.Log($"{exc.Message} {exc.StackTrace}");
+
+                if (exc.InnerException != null)
+                {
+                    Terminal.Log($"{exc.InnerException.Message} {exc.InnerException.StackTrace}");
+                }
             }
-
-            CRMPage lastPage = prevPage ?? currentPage;
-            currentPage = nextPage;
-            
-            currentPage.OnEnter(lastPage, args ?? new CRMPageArgs());
-
-            this.ButtonBehaviour = currentPage.GetButtonBehaviour();
 
         }
 

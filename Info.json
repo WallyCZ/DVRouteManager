@@ -2,7 +2,7 @@
     "Id": "DVRouteManager",
     "DisplayName": "Route Manager",
     "Author": "Wally",
-    "Version": "0.3.0",
+    "Version": "0.3.1",
     "EntryMethod": "DVRouteManager.Module.Load",
     "HomePage": "https://www.nexusmods.com/derailvalley/mods/157",
     "Repository": "https://raw.githubusercontent.com/WallyCZ/DVRouteManager/master/Repository.json"
