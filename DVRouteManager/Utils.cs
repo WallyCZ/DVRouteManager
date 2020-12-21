@@ -36,8 +36,14 @@ namespace DVRouteManager
 
             foreach (var a in aCar.Bogies)
             {
+                if (a.HasDerailed || a.track == null)
+                    continue; //it is derailed, skip it
+
                 foreach (var b in bCar.Bogies)
                 {
+                    if (b.HasDerailed || b.track == null)
+                        continue; //it is derailed, skip it
+
                     float lengthSquare = (a.transform.position - b.transform.position).sqrMagnitude;
                     if(lengthSquare > maxDistanceSquare)
                     {

@@ -20,8 +20,12 @@ using static UnityModManagerNet.UnityModManager;
 
 namespace DVRouteManager
 {
+#if DEBUG
+    [EnableReloading]
+#endif
     static class Module
     {
+        private const string AUDIO_DIRECTORY = "audio\\";
         public static UnityModManager.ModEntry mod;
         public static Settings settings;
 
@@ -34,6 +38,14 @@ namespace DVRouteManager
         public static AudioClip onClip { get; private set; }
         public static AudioClip setClip { get; private set; }
         public static AudioSource generalAudioSource { get; private set; }
+
+        public static string ModulePath
+        {
+            get
+            {
+                return mod.Path;
+            }
+        }
 
         private static Dictionary<string, LocoAI> locosAI = new Dictionary<string, LocoAI>();
         public static LocoAI GetLocoAI(TrainCar car)
@@ -93,21 +105,17 @@ namespace DVRouteManager
                 mod.OnUpdate = OnUpdate;
                 mod.OnGUI = OnGUI;
                 mod.OnSaveGUI = OnSaveGUI;
-
-                stopTrainClip = AudioUtils.LoadAudioClip("audio\\stoptrain.wav", "stoptrain");
-                trainEnd = AudioUtils.LoadAudioClip("audio\\trainend.wav", "trainend");
-                wrongWayClip = AudioUtils.LoadAudioClip("audio\\wrongway.wav", "wrongway");
-                onClip = AudioUtils.LoadAudioClip("audio\\on.wav", "on");
-                offClip = AudioUtils.LoadAudioClip("audio\\off.wav", "off");
-                setClip = AudioUtils.LoadAudioClip("audio\\set.wav", "set");
-
+#if DEBUG
+                modEntry.OnUnload = Unload;
+#endif
                 var harmony = new Harmony(modEntry.Info.Id);
                 harmony.PatchAll(Assembly.GetExecutingAssembly());
 
                 AsyncManager.Initialize();
 
-                 ActiveRoute = new ActiveRoute();
+                ActiveRoute = new ActiveRoute();
 
+                modEntry.Logger.Log("RouteManager initialized");
             }
             catch (Exception exc)
             {
@@ -116,6 +124,14 @@ namespace DVRouteManager
 
             return true;
         }
+
+#if DEBUG
+        static bool Unload(UnityModManager.ModEntry modEntry)
+        {
+            //Before unloading OnToggle with active = false is called
+            return true;
+        }
+#endif
 
         private static void OnSaveGUI(ModEntry modEntry)
         {
@@ -179,6 +195,16 @@ namespace DVRouteManager
                 yield return null;
             }
 
+
+
+            stopTrainClip = AudioUtils.LoadAudioClip(AUDIO_DIRECTORY + "stoptrain.wav", "stoptrain");
+            trainEnd = AudioUtils.LoadAudioClip(AUDIO_DIRECTORY + "trainend.wav", "trainend");
+            wrongWayClip = AudioUtils.LoadAudioClip(AUDIO_DIRECTORY + "wrongway.wav", "wrongway");
+            onClip = AudioUtils.LoadAudioClip(AUDIO_DIRECTORY + "on.wav", "on");
+            offClip = AudioUtils.LoadAudioClip(AUDIO_DIRECTORY + "off.wav", "off");
+            setClip = AudioUtils.LoadAudioClip(AUDIO_DIRECTORY + "set.wav", "set");
+
+            Terminal.Shell.Commands.Remove("route");
             Terminal.Shell.AddCommand("route", RouteCommand.DoTerminalCommand, 0, -1, "", null);
             Terminal.Autocomplete.Register("route");
             Terminal.Log("Route command registered");
@@ -237,8 +263,6 @@ namespace DVRouteManager
 
         private static void StopInitCoroutines()
         {
-            AsyncManager.StopCoroutine(SetupCommands());
-            AsyncManager.StopCoroutine(CheckUpdates());
         }
 
 
@@ -248,17 +272,27 @@ namespace DVRouteManager
             if (active)
             {
                 StartInitCoroutines();
+                AddCommsRouteManager();
             }
             else
             {
-                Terminal.Shell.Commands.Remove("route");
-                StopInitCoroutines();
-                //Terminal.Autocomplete.UnRegister("route"); //currently not able unregister
-                Module.ActiveRoute.ClearRoute();
+                Deactivate();
             }
 
             return true;
         }
+
+        private static void Deactivate()
+        {
+            Terminal.Log("RouteManager deactivating");
+
+            RemoveCommsRouteManager();
+            Terminal.Shell.Commands.Remove("route");
+            StopInitCoroutines();
+            //Terminal.Autocomplete.UnRegister("route"); //currently not able unregister
+            Module.ActiveRoute.ClearRoute();
+        }
+
         private static void OnUpdate(ModEntry arg1, float arg2)
         {
             if (Module.ActiveRoute.IsSet && Module.ActiveRoute.RouteTracker != null && Module.settings.TrainEndAlarm.Down())
@@ -281,7 +315,7 @@ namespace DVRouteManager
                 LocoCruiseControl.ToggleCruiseControl(60.0f);
             }
 
-            if (Module.settings.CruiseControlMinus.Down() )
+            if (Module.settings.CruiseControlMinus.Down())
             {
                 LocoCruiseControl.UpdateTargetSpeed(-5.0f);
             }
@@ -292,18 +326,28 @@ namespace DVRouteManager
             }
         }
 
-    }
 
-    [HarmonyPatch(typeof(CommsRadioController), "Awake")]
-    static class TrainSpawnerPlus_Patch
-    {
-        static void Postfix(CommsRadioController __instance)
+        static CommsRadioController commsRadioController;
+        static CommsRouteManager commsRouteManager;
+
+        private static void AddCommsRouteManager()
         {
+
+            if (commsRadioController == null)
+            {
+                commsRadioController = Resources.FindObjectsOfTypeAll<CommsRadioController>().FirstOrDefault();
+                if (commsRadioController == null)
+                {
+                    Module.mod.Logger.Log("commsRadioController empty");
+                    return;
+                }
+            }
+
             try
             {
-                var modes = Traverse.Create(__instance).Field("allModes").GetValue<List<ICommsRadioMode>>();
+                var modes = Traverse.Create(commsRadioController).Field("allModes").GetValue<List<ICommsRadioMode>>();
 
-                if (modes.Count > 0)
+                if (modes != null && modes.Count > 0)
                 {
                     GameObject objToSpawn = new GameObject("CommsRouteManager");
                     objToSpawn.AddComponent<CommsRouteManager>();
@@ -313,18 +357,61 @@ namespace DVRouteManager
                     objToSpawn.transform.parent = (modes[0] as MonoBehaviour).gameObject.transform;
                     objToSpawn.SetActive(true);
                     modes.Add(radioMode);
+                    commsRouteManager = radioMode;
+                    Module.mod.Logger.Log("Comm radio mode added");
                 }
                 else
                 {
-                    Terminal.Log($"No commsradio modes found");
+                    Module.mod.Logger.Log($"No commsradio modes found");
                 }
 
             }
             catch (Exception e)
             {
-                Terminal.Log("Error in mod CommsRadioController registration: " + e.Message);
+                Module.mod.Logger.Log("Error in mod CommsRadioController registration: " + e.Message);
+            }
+        }
+
+        private static void RemoveCommsRouteManager()
+        {
+
+            if (commsRadioController == null)
+            {
+                Module.mod.Logger.Log("commsRadioController empty");
+                return;
+            }
+
+            try
+            {
+                var modes = Traverse.Create(commsRadioController).Field("allModes").GetValue<List<ICommsRadioMode>>();
+
+                if (modes != null && commsRouteManager != null)
+                {
+                    modes.Remove(commsRouteManager);
+                    Module.mod.Logger.Log("Comm radio mode removed");
+                }
+                else
+                {
+                    Module.mod.Logger.Log($"No commsradio modes found");
+                }
+
+            }
+            catch (Exception e)
+            {
+                Module.mod.Logger.Log("Error in mod CommsRadioController removing: " + e.Message);
+            }
+        }
+
+
+        [HarmonyPatch(typeof(CommsRadioController), "Awake")]
+        static class TrainSpawnerPlus_Patch
+        {
+            static void Postfix(CommsRadioController __instance)
+            {
+                commsRadioController = __instance;
+                Module.mod.Logger.Log("commsRadioController set");
+                AddCommsRouteManager();
             }
         }
     }
-
 }

@@ -262,11 +262,17 @@ namespace DVRouteManager
 
                         (Bogie firstBoogie, Bogie lastBogie) = Utils.GetBogiesWithMaxDistance(firstCar, lastCar);
 
-                        firstCarPosition.dvCar = firstCar;
-                        firstCarPosition.UpdatePosition(firstBoogie);
+                        if (firstBoogie != null)
+                        {
+                            firstCarPosition.dvCar = firstCar;
+                            firstCarPosition.UpdatePosition(firstBoogie);
+                        }
 
-                        lastCarPosition.dvCar = lastCar;
-                        lastCarPosition.UpdatePosition(lastBogie);
+                        if (lastBogie != null)
+                        {
+                            lastCarPosition.dvCar = lastCar;
+                            lastCarPosition.UpdatePosition(lastBogie);
+                        }
 
 #if DEBUG2
                         Terminal.Log($"first track {firstCarPosition.track?.logicTrack.ID.FullID} next {firstCarPosition.trackNext?.logicTrack.ID.FullID} span {firstCarPosition.span}");

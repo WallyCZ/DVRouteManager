@@ -16,7 +16,7 @@ namespace DVRouteManager
         {
             try
             {
-                string path = Path.Combine(Path.GetDirectoryName(typeof(AudioUtils).Assembly.Location), fileName);
+                string path = Path.Combine(Path.GetDirectoryName(Module.ModulePath), fileName);
 
                 WAV wav = new WAV(path);
 

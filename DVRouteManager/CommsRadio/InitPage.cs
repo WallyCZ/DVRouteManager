@@ -74,10 +74,8 @@ namespace DVRouteManager.CommsRadio
                         {
                             File.WriteAllBytes(outFile, www.downloadHandler.data);
 
-                            string assemblyPath = Path.GetDirectoryName(this.GetType().Assembly.Location);
-
                             //rename currently used DLLs
-                            foreach (string file in Directory.GetFiles(assemblyPath, "*.dll"))
+                            foreach (string file in Directory.GetFiles(Module.ModulePath, "*.dll"))
                             {
                                 if (Path.GetFileName(file).StartsWith("DVRouteManager"))
                                     continue;
@@ -90,8 +88,13 @@ namespace DVRouteManager.CommsRadio
 
                             using (Unzip unzip = new Unzip(outFile))
                             {
-                                unzip.ExtractToDirectory(
-                                    Path.GetDirectoryName(assemblyPath)); //get parent directory
+                                var destPath = Module.ModulePath;
+                                if (Directory.Exists(destPath))
+                                    destPath = Path.GetDirectoryName(destPath); //remove trailing \ if it is present
+
+                                destPath = Path.GetDirectoryName(destPath); //get parent directory
+
+                                unzip.ExtractToDirectory(destPath); 
                             }
 
                             DisplayText("Done, update applies after game restart", "OK");
