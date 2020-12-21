@@ -19,7 +19,7 @@ namespace DVRouteManager.CommsRadio
         {
         }
 
-        protected void SetupSelector()
+        protected bool SetupSelector()
         {
             selectorSetup = true;
 
@@ -33,7 +33,10 @@ namespace DVRouteManager.CommsRadio
             if(menuSelector.Current == null)
             {
                 Terminal.Log("Selector has no items!");
+                return false;
             }
+
+            return true;
         }
 
         protected abstract List<MenuItem> CreateMenuItems();
@@ -49,7 +52,11 @@ namespace DVRouteManager.CommsRadio
         {
             if(!selectorSetup)
             {
-                SetupSelector();
+                if(!SetupSelector())
+                {
+                    //selector setup failed, so create at least exit menu
+                    menuSelector = new Selector<MenuItem>( new List<MenuItem>() { GetExitMenu() });
+                }
             }
 
             PrintCurrentSelector();

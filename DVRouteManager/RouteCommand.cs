@@ -165,8 +165,18 @@ namespace DVRouteManager
                     {
                         throw new CommandException("No last loco");
                     }
-                    args[1].String = trainCar.trainset.firstCar.logicCar.CurrentTrack.ID.FullDisplayID;
+
+                    if (trainCar.trainset.firstCar.logicCar.BogiesOnSameTrack)
+                    {
+                        args[1].String = trainCar.trainset.firstCar.logicCar.CurrentTrack.ID.FullID;
+                    }
+                    else
+                    {
+                        args[1].String = trainCar.trainset.firstCar.logicCar.FrontBogieTrack.ID.FullID;
+                    }
+
                     trainset = trainCar.trainset;
+                    Terminal.Log($"current loco track end");
                 }
                 else if (args[1].String == "job.trainset")
                 {
@@ -179,9 +189,9 @@ namespace DVRouteManager
                 }
 
 
-                RailTrack startTrack = TrackFinder.AllTracks.FirstOrDefault((RailTrack track) => track?.logicTrack.ID.FullDisplayID == args[1].String);
+                RailTrack startTrack = RailTrackRegistry.AllTracks.FirstOrDefault((RailTrack track) => track?.logicTrack.ID.FullID == args[1].String);
 
-                RailTrack goalTrack = TrackFinder.AllTracks.FirstOrDefault((RailTrack track) => track?.logicTrack.ID.FullDisplayID == args[3].String);
+                RailTrack goalTrack = RailTrackRegistry.AllTracks.FirstOrDefault((RailTrack track) => track?.logicTrack.ID.FullID == args[3].String);
 
                 RouteTaskChain chain = RouteTaskChain.FromDestination(goalTrack.logicTrack, trainset);
                 var tracker = new RouteTracker(chain, false);
@@ -251,7 +261,7 @@ namespace DVRouteManager
 #if DEBUG
             else if (args[0].String == "track")
             {
-                var track = TrackFinder.AllTracks.Where(t => t.logicTrack.ID.FullDisplayID.ToLower() == args[1].String.ToLower()).FirstOrDefault();
+                var track = RailTrackRegistry.AllTracks.Where(t => t.logicTrack.ID.FullID.ToLower() == args[1].String.ToLower()).FirstOrDefault();
                 if(track == null)
                 {
                     throw new CommandException("track not found");
@@ -268,6 +278,24 @@ namespace DVRouteManager
                     Terminal.Log("OUT: " + track.GetAllOutBranches().Select(b => b.track.logicTrack.ID.FullID).Aggregate((a, b) => a + "; " + b));
                 }
             }
+            else if (args[0].String == "trainset")
+            {
+                TrainCar trainCar = PlayerManager.LastLoco;
+
+                if (trainCar == null)
+                {
+                    throw new CommandException("No last loco");
+                }
+
+                Terminal.Log($"loco trainset cars: {trainCar.trainset.cars.Count}");
+                Terminal.Log($"first car: {trainCar.trainset.firstCar.logicCar.ID}");
+                Terminal.Log($"last car: {trainCar.trainset.lastCar.logicCar.ID}");
+                Terminal.Log($"first car track: {trainCar.trainset.firstCar.logicCar.CurrentTrack?.ID.FullDisplayID}");
+                Terminal.Log($"last car track: {trainCar.trainset.lastCar.logicCar.CurrentTrack?.ID.FullDisplayID}");
+                Terminal.Log($"first car front boogie track: {trainCar.trainset.firstCar.logicCar.FrontBogieTrack?.ID.FullDisplayID}");
+                Terminal.Log($"first car rear boogie track: {trainCar.trainset.firstCar.logicCar.RearBogieTrack?.ID.FullDisplayID}");
+            }
+
 #endif
             else if (args[0].String == "auto")
             {
@@ -285,7 +313,7 @@ namespace DVRouteManager
                     return;
                 }
 
-                RailTrack goalTrack = TrackFinder.AllTracks.FirstOrDefault((RailTrack track) => track?.logicTrack.ID.FullDisplayID == args[1].String);
+                RailTrack goalTrack = RailTrackRegistry.AllTracks.FirstOrDefault((RailTrack track) => track?.logicTrack.ID.FullID == args[1].String);
                 if (goalTrack == null)
                 {
                     throw new CommandException("Goal track not found");

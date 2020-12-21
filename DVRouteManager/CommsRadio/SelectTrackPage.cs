@@ -26,12 +26,18 @@ namespace DVRouteManager.CommsRadio
 
         protected override List<MenuItem> CreateMenuItems()
         {
-            var trackList = TrackFinder.AllTracks.Select(p => p.logicTrack.ID.FullDisplayID)
+            var trackList = RailTrackRegistry.AllTracks.Select(p => p.logicTrack.ID.FullID)
                 .Where(s => s.StartsWith(selectedTownStationCode + TRACK_PARTS_SEPARATOR))
                 .Select(s => s.GetAfterOrEmpty(TRACK_PARTS_SEPARATOR).GetAfterOrEmpty(TRACK_PARTS_SEPARATOR))
                 .OrderBy(s => s)
                 .Select(s => new MenuItem(s, null))
                 .ToList();
+
+            if (trackList.Count == 0)
+            {
+                Terminal.Log("No track found in town " + selectedTownStationCode);
+            }
+
 
             return trackList;
         }
