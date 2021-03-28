@@ -116,6 +116,8 @@ namespace DVRouteManager
                 ActiveRoute = new ActiveRoute();
 
                 modEntry.Logger.Log("RouteManager initialized");
+
+                Terminal.Log($"Load, audio source {generalAudioSource}");
             }
             catch (Exception exc)
             {
@@ -175,8 +177,10 @@ namespace DVRouteManager
 
                     JsonObject releaseInfo = ((json["Releases"] as JsonArray)?[0] as JsonObject);
                     string version = (string)releaseInfo?["Version"];
+                    Version latestVersion = new Version(version);
+                    Version moduleVersion = new Version(mod.Info.Version);
 
-                    if (version != mod.Info.Version)
+                    if (latestVersion > moduleVersion)
                     {
                         VersionForUpdate = new VersionInfo();
                         VersionForUpdate.Version = version;
@@ -194,8 +198,6 @@ namespace DVRouteManager
             {
                 yield return null;
             }
-
-
 
             stopTrainClip = AudioUtils.LoadAudioClip(AUDIO_DIRECTORY + "stoptrain.wav", "stoptrain");
             trainEnd = AudioUtils.LoadAudioClip(AUDIO_DIRECTORY + "trainend.wav", "trainend");
@@ -222,12 +224,22 @@ namespace DVRouteManager
                 listener = UnityEngine.Object.FindObjectOfType<AudioListener>();
             }
 
+            SetupAudioSource(listener);
+
+#if DEBUG
+            Terminal.Log($"AudioListener found {generalAudioSource}");
+            mod.Logger.Log("AudioListener found");
+#endif
+        }
+
+        private static void SetupAudioSource(AudioListener listener)
+        {
             generalAudioSource = listener.gameObject.AddComponent<AudioSource>();
             //audioSource.outputAudioMixerGroup = Engine_Layered_Audio.audioMixerGroup;
             generalAudioSource.playOnAwake = true;
             generalAudioSource.loop = false;
             generalAudioSource.maxDistance = 300f;
-            generalAudioSource.clip = Module.stopTrainClip;
+            //generalAudioSource.clip = Module.stopTrainClip;
             generalAudioSource.spatialBlend = 1f;
             generalAudioSource.dopplerLevel = 0f;
             generalAudioSource.spread = 10f;
@@ -235,10 +247,27 @@ namespace DVRouteManager
 
         public static void PlayClip(AudioClip clip)
         {
+            if (generalAudioSource == null)
+            {
+                AudioListener listener = UnityEngine.Object.FindObjectOfType<AudioListener>();
+#if DEBUG
+                Terminal.Log("PlayClip Init #2");
+#endif
+                SetupAudioSource(listener);
+            }
+
             if (generalAudioSource != null && clip != null)
             {
                 generalAudioSource.clip = clip;
                 generalAudioSource.Play();
+            }
+            else if(clip == null)
+            {
+                Terminal.Log("Cannot play sound, clip == null");
+            }
+            else if (generalAudioSource == null)
+            {
+                Terminal.Log("Cannot play sound, generalAudioSource == null");
             }
         }
 

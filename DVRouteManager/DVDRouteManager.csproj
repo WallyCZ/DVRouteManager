@@ -61,6 +61,7 @@
       <HintPath>C:\Program Files (x86)\Steam\steamapps\common\Derail Valley\DerailValley_Data\Managed\DV.Interaction.dll</HintPath>
       <Private>False</Private>
     </Reference>
+    <Reference Include="DV.PointSet" />
     <Reference Include="DV.Utils">
       <HintPath>C:\Program Files (x86)\Steam\steamapps\common\Derail Valley\DerailValley_Data\Managed\DV.Utils.dll</HintPath>
       <Private>False</Private>
@@ -68,6 +69,7 @@
     <Reference Include="Microsoft.CSharp, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
       <Private>False</Private>
     </Reference>
+    <Reference Include="net.smkd.vector3d" />
     <Reference Include="Priority Queue, Version=4.2.0.0, Culture=neutral, processorArchitecture=MSIL">
       <HintPath>..\packages\OptimizedPriorityQueue.4.2.0\lib\net45\Priority Queue.dll</HintPath>
     </Reference>
