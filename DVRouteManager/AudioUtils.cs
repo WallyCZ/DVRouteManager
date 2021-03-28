@@ -24,11 +24,16 @@ namespace DVRouteManager
 
                 audioClip.SetData(wav.LeftChannel, 0);
 
+#if DEBUG   
+                Terminal.Log("Audio clip loaded " + clipName);
+#endif
+
                 return audioClip;
             }
             catch(Exception exc)
             {
-                Terminal.Log(exc.Message);
+                Terminal.Log(exc.Message + ": " + exc.StackTrace);
+                Module.mod.Logger.LogException(exc);
             }
 
             return null;
