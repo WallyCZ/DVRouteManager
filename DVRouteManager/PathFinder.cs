@@ -95,8 +95,8 @@ namespace DVRouteManager
         {
             Terminal.Log($"{start.ID.FullID} -> {goal.ID.FullID}");
 
-            RailTrack startTrack = RailTrackRegistry.AllTracks.FirstOrDefault((RailTrack track) => track?.logicTrack.ID.FullID == start.ID.FullID);
-            RailTrack goalTrack = RailTrackRegistry.AllTracks.FirstOrDefault((RailTrack track) => track?.logicTrack.ID.FullID == goal.ID.FullID);
+            RailTrack startTrack = RailTrackRegistry.Instance.AllTracks.FirstOrDefault((RailTrack track) => track?.logicTrack.ID.FullID == start.ID.FullID);
+            RailTrack goalTrack = RailTrackRegistry.Instance.AllTracks.FirstOrDefault((RailTrack track) => track?.logicTrack.ID.FullID == goal.ID.FullID);
 
             if (startTrack == null || goalTrack == null)
             {

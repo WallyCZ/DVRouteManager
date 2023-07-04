@@ -57,11 +57,14 @@
       <HintPath>C:\Program Files (x86)\Steam\steamapps\common\Derail Valley\DerailValley_Data\Managed\BezierCurves.dll</HintPath>
       <Private>False</Private>
     </Reference>
+    <Reference Include="CommandTerminal" />
     <Reference Include="DV.Interaction">
       <HintPath>C:\Program Files (x86)\Steam\steamapps\common\Derail Valley\DerailValley_Data\Managed\DV.Interaction.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="DV.PointSet" />
+    <Reference Include="DV.Simulation" />
+    <Reference Include="DV.ThingTypes" />
     <Reference Include="DV.Utils">
       <HintPath>C:\Program Files (x86)\Steam\steamapps\common\Derail Valley\DerailValley_Data\Managed\DV.Utils.dll</HintPath>
       <Private>False</Private>

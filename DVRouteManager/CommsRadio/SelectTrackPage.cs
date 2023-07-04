@@ -26,7 +26,7 @@ namespace DVRouteManager.CommsRadio
 
         protected override List<MenuItem> CreateMenuItems()
         {
-            var trackList = RailTrackRegistry.AllTracks.Select(p => p.logicTrack.ID.FullID)
+            var trackList = RailTrackRegistry.Instance.AllTracks.Select(p => p.logicTrack.ID.FullID)
                 .Where(s => s.StartsWith(selectedTownStationCode + TRACK_PARTS_SEPARATOR))
                 .Select(s => s.GetAfterOrEmpty(TRACK_PARTS_SEPARATOR).GetAfterOrEmpty(TRACK_PARTS_SEPARATOR))
                 .OrderBy(s => s)

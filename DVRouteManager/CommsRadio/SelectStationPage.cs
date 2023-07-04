@@ -23,7 +23,7 @@ namespace DVRouteManager.CommsRadio
 
         protected override List<MenuItem> CreateMenuItems()
         {
-            var stationList = RailTrackRegistry.AllTracks.Select(p => p.logicTrack.ID.FullID)
+            var stationList = RailTrackRegistry.Instance.AllTracks.Select(p => p.logicTrack.ID.FullID)
                 .Where(s => s.StartsWith(selectedTownCode + SelectTrackPage.TRACK_PARTS_SEPARATOR))
                 .Select(s => s.GetAfterOrEmpty(SelectTrackPage.TRACK_PARTS_SEPARATOR).GetUntilOrEmpty(SelectTrackPage.TRACK_PARTS_SEPARATOR))
                 .Distinct()

@@ -1,6 +1,7 @@
 ﻿using CommandTerminal;
 using DV;
 using DV.Logic.Job;
+using DV.Simulation.Cars;
 using DV.Teleporters;
 using DVRouteManager.CommsRadio;
 using HarmonyLib;
@@ -53,32 +54,17 @@ namespace DVRouteManager
             LocoAI locoAI;
             if (!locosAI.TryGetValue(car.logicCar.ID, out locoAI))
             {
-                DieselLocoSimulation dieselSim = car.GetComponent<DieselLocoSimulation>();
-                if (dieselSim != null)
+                SimController simController = car.GetComponent<SimController>();
+                if (!simController.controlsOverrider.EngineOnReader == null)
                 {
-                    if (!dieselSim.engineOn)
-                    {
-                        throw new CommandException("Engine off");
-                    }
+                    throw new CommandException("Unsupported locomotive");
                 }
-                else
-                {
-                    ShunterLocoSimulation shunterSim = car.GetComponent<ShunterLocoSimulation>();
-                    if (shunterSim != null)
-                    {
-                        if (!shunterSim.engineOn)
-                        {
-                            throw new CommandException("Engine off");
-                        }
-
-                    }
-                    else
-                    {
-                        throw new CommandException("Loco not compatible");
-                    }
+                
+                if (!simController.controlsOverrider.EngineOnReader.IsOn)
+                { 
+                    throw new CommandException("Engine off");
                 }
-
-                LocoControllerShunter shunterController = car.GetComponent<LocoControllerShunter>();
+  
                 ILocomotiveRemoteControl remote = car.GetComponent<ILocomotiveRemoteControl>();
                 locoAI = new LocoAI(remote);
                 locosAI.Add(car.logicCar.ID, locoAI);
@@ -208,7 +194,9 @@ namespace DVRouteManager
 
             Terminal.Shell.Commands.Remove("route");
             Terminal.Shell.AddCommand("route", RouteCommand.DoTerminalCommand, 0, -1, "", null);
-            Terminal.Autocomplete.Register("route");
+            CommandInfo ci = new CommandInfo();
+            ci.name = "route";
+            Terminal.Autocomplete.Register(ci);
             Terminal.Log("Route command registered");
         }
 

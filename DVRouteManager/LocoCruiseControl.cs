@@ -105,7 +105,7 @@ namespace DVRouteManager
 
             if (error < - 3.0f || TargetSpeed < Mathf.Epsilon)
             {
-                remoteControl.UpdateIndependentBrake(0.3f * error * -1.0f * dt);
+                remoteControl.UpdateIndependentBrake(0.2f * error * -1.0f * dt);
             }
             else if (remoteControl.GetTargetIndependentBrake() > Mathf.Epsilon)
             {
@@ -176,13 +176,13 @@ namespace DVRouteManager
       
         protected float ThrottleCurveFactor(float target, bool increasing)
         {
-            if (target < 0.4f)
-                return 0.01f;
+            if (target < 0.3f)
+                return 0.07f;
 
             if (target > 0.6f & increasing)
                 return 0.0005f;
 
-            return increasing ? 0.002f : 0.01f;
+            return increasing ? 0.002f : 0.04f;
         }
 
         public void Dispose()
