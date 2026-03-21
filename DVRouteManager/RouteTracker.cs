@@ -248,14 +248,14 @@ namespace DVRouteManager
             {
                 try
                 { 
-                    if (!AppUtil.IsPaused)
+                    if (!AppUtil.Instance.IsTimePaused)
                     {
                         ElapsedTime += Time.time - lastTime;
                     }
 
                     lastTime = Time.time;
 
-                    if (PlayerManager.LastLoco != null && ! AppUtil.IsPaused)
+                    if (PlayerManager.LastLoco != null && ! AppUtil.Instance.IsTimePaused)
                     {
                         TrainCar firstCar = Trainset.firstCar;
                         TrainCar lastCar = Trainset.lastCar;

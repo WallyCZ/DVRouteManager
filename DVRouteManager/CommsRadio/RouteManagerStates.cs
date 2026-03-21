@@ -300,7 +300,6 @@ namespace DVRouteManager.CommsRadio
             try
             {
                 task = RouteCommand.DoCommand(args);
-                task.Start();
             }
             catch (Exception e)
             {

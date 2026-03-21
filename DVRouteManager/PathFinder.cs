@@ -95,18 +95,8 @@ namespace DVRouteManager
         {
             Terminal.Log($"{start.ID.FullID} -> {goal.ID.FullID}");
 
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
-            RailTrack startTrack = RailTrackRegistry.AllTracks.FirstOrDefault((RailTrack track) => track?.logicTrack.ID.FullID == start.ID.FullID);
-            RailTrack goalTrack = RailTrackRegistry.AllTracks.FirstOrDefault((RailTrack track) => track?.logicTrack.ID.FullID == goal.ID.FullID);
-=======
             RailTrack startTrack = RailTrackRegistryBase.RailTracks.FirstOrDefault((RailTrack track) => track?.LogicTrack().ID.FullID == start.ID.FullID);
             RailTrack goalTrack = RailTrackRegistryBase.RailTracks.FirstOrDefault((RailTrack track) => track?.LogicTrack().ID.FullID == goal.ID.FullID);
->>>>>>> Stashed changes
-=======
-            RailTrack startTrack = RailTrackRegistryBase.RailTracks.FirstOrDefault((RailTrack track) => track?.LogicTrack().ID.FullID == start.ID.FullID);
-            RailTrack goalTrack = RailTrackRegistryBase.RailTracks.FirstOrDefault((RailTrack track) => track?.LogicTrack().ID.FullID == goal.ID.FullID);
->>>>>>> Stashed changes
 
             if (startTrack == null || goalTrack == null)
             {
