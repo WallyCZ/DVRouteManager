@@ -73,6 +73,10 @@
       <HintPath>$(DVInstallPath)DerailValley_Data\Managed\DV.RailTrack.dll</HintPath>
       <Private>False</Private>
     </Reference>
+    <Reference Include="DV.BrakeSystem">
+      <HintPath>$(DVInstallPath)DerailValley_Data\Managed\DV.BrakeSystem.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
     <Reference Include="DV.Simulation">
       <HintPath>$(DVInstallPath)DerailValley_Data\Managed\DV.Simulation.dll</HintPath>
       <Private>False</Private>

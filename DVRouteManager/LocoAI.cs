@@ -1,8 +1,10 @@
 ﻿using CommandTerminal;
+using DV.Logic.Job;
 using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Threading.Tasks;
@@ -16,9 +18,71 @@ namespace DVRouteManager
         private const float COUPLER_APPROACH_SPEED = 5.0f;
         private RouteTracker RouteTracker;
 
-        public LocoAI(ILocomotiveRemoteControl remoteControl) :
-            base(remoteControl)
+        public bool IsRunning => running;
+        private bool _freightHaulActive = false;
+        public bool IsFreightHaulActive => _freightHaulActive;
+
+        public LocoAI(ILocomotiveRemoteControl remoteControl, TrainCar car) :
+            base(remoteControl, car)
         {
+        }
+
+        // Disables DriverAssist and SteamCruiseControl via reflection so they don't fight us.
+        // Both mods are optional — failures are silently swallowed.
+        private static void DisableCompetingMods()
+        {
+            var assemblies = AppDomain.CurrentDomain.GetAssemblies();
+
+            // DriverAssist: EntityManager.Instance.Loco.Components.CruiseControl = null
+            try
+            {
+                var asm = assemblies.FirstOrDefault(a => a.GetName().Name == "DriverAssist");
+                if (asm != null)
+                {
+                    Type entityManagerType = asm.GetType("EntityManager");
+                    FieldInfo instanceField = entityManagerType?.GetField("Instance");
+                    object entityManager = instanceField?.GetValue(null);
+                    FieldInfo locoField = entityManager?.GetType().GetField("Loco");
+                    object loco = locoField?.GetValue(entityManager);
+                    if (loco != null)
+                    {
+                        FieldInfo componentsField = loco.GetType().GetField("Components");
+                        object components = componentsField?.GetValue(loco);
+                        if (components != null)
+                        {
+                            PropertyInfo cruiseControlProp = components.GetType().GetProperty("CruiseControl");
+                            cruiseControlProp?.SetValue(components, null);
+                            Terminal.Log("DriverAssist cruise control disabled");
+                        }
+                    }
+                }
+            }
+            catch (Exception e)
+            {
+                Module.mod.Logger.Log("DisableCompetingMods DriverAssist: " + e.Message);
+            }
+
+            // SteamCruiseControl: Main._cruiseControlManager.IsEnabled = false
+            try
+            {
+                var asm = assemblies.FirstOrDefault(a => a.GetName().Name == "SteamCruiseControl");
+                if (asm != null)
+                {
+                    Type mainType = asm.GetType("SteamCruiseControl.Main");
+                    FieldInfo managerField = mainType?.GetField("_cruiseControlManager", BindingFlags.Static | BindingFlags.NonPublic);
+                    object manager = managerField?.GetValue(null);
+                    if (manager != null)
+                    {
+                        PropertyInfo isEnabledProp = manager.GetType().GetProperty("IsEnabled");
+                        isEnabledProp?.SetValue(manager, false);
+                        Terminal.Log("SteamCruiseControl disabled");
+                    }
+                }
+            }
+            catch (Exception e)
+            {
+                Module.mod.Logger.Log("DisableCompetingMods SteamCruiseControl: " + e.Message);
+            }
         }
 
         public bool StartAI(RouteTracker routeTracker)
@@ -33,6 +97,7 @@ namespace DVRouteManager
             if (RouteTracker.TrackState != RouteTracker.TrackingState.BeforeStart && RouteTracker.TrackState != RouteTracker.TrackingState.OnStart)
                 return false;
 
+            DisableCompetingMods();
             RouteTracker.Route.AdjustSwitches();
 
             TargetSpeed = TARGET_SPEED_DEFAULT;
@@ -223,7 +288,157 @@ namespace DVRouteManager
                 remoteControl.UpdateBrake(-1.0f);
                 yield return new WaitForSeconds(0.1f);
             }
+        }
 
+        // ─── Freight haul ────────────────────────────────────────────────────
+
+        /// <summary>Stops both the AI driving and any active freight haul.</summary>
+        public void StopAll()
+        {
+            _freightHaulActive = false;
+            Stop();
+        }
+
+        /// <summary>
+        /// Starts a full freight haul: loco → cars → couple → release HB → destination → uncouple → apply HB.
+        /// </summary>
+        public void StartFreightHaul(RouteTask task, TrainCar loco)
+        {
+            _freightHaulActive = false; // abort any existing haul
+            Stop();
+            Module.StartCoroutine(FreightHaulCoroutine(task, loco));
+        }
+
+        private IEnumerator FreightHaulCoroutine(RouteTask task, TrainCar loco)
+        {
+            _freightHaulActive = true;
+
+            // ── Phase 1: drive loco to freight cars ──────────────────────────
+            Terminal.Log("Freight haul: phase 1 – routing to cars");
+
+            Trainset freightTrainset = task.TrainSets.FirstOrDefault();
+            if (freightTrainset == null)
+            {
+                Terminal.Log("Freight haul: no trainset in task");
+                _freightHaulActive = false;
+                yield break;
+            }
+
+            Track carTrack = freightTrainset.firstCar.Bogies[0].track.LogicTrack();
+            Track locoTrack = loco.trainset.firstCar.Bogies[0].track.LogicTrack();
+
+            var toCarsTask = Route.FindRoute(locoTrack, carTrack, ReversingStrategy.ChooseBest, loco.trainset);
+            while (!toCarsTask.IsCompleted) yield return null;
+
+            if (!_freightHaulActive) yield break;
+
+            if (toCarsTask.IsFaulted || toCarsTask.Result == null)
+            {
+                Terminal.Log("Freight haul: cannot find route to cars – " + (toCarsTask.Exception?.InnerException?.Message ?? "null"));
+                _freightHaulActive = false;
+                yield break;
+            }
+
+            var chain1 = RouteTaskChain.FromDestination(carTrack, loco.trainset);
+            var tracker1 = new RouteTracker(chain1, true);
+            tracker1.SetRoute(toCarsTask.Result, loco.trainset);
+            Module.ActiveRoute.Route = toCarsTask.Result;
+            Module.ActiveRoute.RouteTracker = tracker1;
+
+            StartAI(tracker1);
+            while (running && _freightHaulActive) yield return null;
+
+            if (!_freightHaulActive) { Stop(); yield break; }
+
+            // ── Phase 2: couple and release handbrakes ───────────────────────
+            Terminal.Log("Freight haul: phase 2 – coupling");
+            yield return TryCoupleAndReleaseHandbrakes(loco);
+            yield return new WaitForSeconds(1.5f);
+
+            if (!_freightHaulActive) yield break;
+
+            // ── Phase 3: drive to destination ────────────────────────────────
+            Terminal.Log($"Freight haul: phase 3 – routing to {task.DestinationTrack.ID.FullID}");
+
+            Track nowTrack = loco.trainset.firstCar.Bogies[0].track.LogicTrack();
+            var toDestTask = Route.FindRoute(nowTrack, task.DestinationTrack, ReversingStrategy.ChooseBest, loco.trainset);
+            while (!toDestTask.IsCompleted) yield return null;
+
+            if (!_freightHaulActive) yield break;
+
+            if (toDestTask.IsFaulted || toDestTask.Result == null)
+            {
+                Terminal.Log("Freight haul: cannot find route to destination – " + (toDestTask.Exception?.InnerException?.Message ?? "null"));
+                _freightHaulActive = false;
+                yield break;
+            }
+
+            var chain2 = RouteTaskChain.FromDestination(task.DestinationTrack, loco.trainset);
+            var tracker2 = new RouteTracker(chain2, true);
+            tracker2.SetRoute(toDestTask.Result, loco.trainset);
+            Module.ActiveRoute.Route = toDestTask.Result;
+            Module.ActiveRoute.RouteTracker = tracker2;
+
+            StartAI(tracker2);
+            while (running && _freightHaulActive) yield return null;
+
+            if (!_freightHaulActive) { Stop(); yield break; }
+
+            // ── Phase 4: uncouple and apply handbrakes ───────────────────────
+            Terminal.Log("Freight haul: phase 4 – uncoupling");
+            yield return UncoupleAndApplyHandbrakes(loco);
+
+            _freightHaulActive = false;
+            Terminal.Log("Freight haul: complete!");
+            Module.PlayClip(Module.trainEnd);
+        }
+
+        private IEnumerator TryCoupleAndReleaseHandbrakes(TrainCar loco)
+        {
+            // Couple any couplers at the ends of the current trainset that are in range
+            Coupler frontEnd = CouplerLogic.GetLastCoupler(loco.trainset.firstCar.frontCoupler);
+            Coupler rearEnd = CouplerLogic.GetLastCoupler(loco.trainset.lastCar.rearCoupler);
+            frontEnd.GetFirstCouplerInRange(2.5f)?.TryCouple();
+            rearEnd.GetFirstCouplerInRange(2.5f)?.TryCouple();
+            yield return new WaitForSeconds(0.5f);
+
+            // Release handbrakes on all non-loco cars now in the trainset
+            foreach (TrainCar car in loco.trainset.cars)
+            {
+                if (!car.IsLoco && car.brakeSystem.hasHandbrake)
+                {
+                    car.brakeSystem.SetHandbrakePosition(0f);
+                    Terminal.Log($"Released handbrake on {car.logicCar.ID}");
+                }
+            }
+        }
+
+        private IEnumerator UncoupleAndApplyHandbrakes(TrainCar loco)
+        {
+            // Record freight cars before uncoupling so we can apply their handbrakes after
+            List<TrainCar> freightCars = loco.trainset.cars.Where(c => !c.IsLoco).ToList();
+
+            if (loco.trainset.firstCar == loco)
+                loco.rearCoupler.Uncouple();
+            else if (loco.trainset.lastCar == loco)
+                loco.frontCoupler.Uncouple();
+            else
+            {
+                loco.frontCoupler.Uncouple();
+                yield return null;
+                loco.rearCoupler.Uncouple();
+            }
+
+            yield return new WaitForSeconds(0.5f);
+
+            foreach (TrainCar car in freightCars)
+            {
+                if (car.brakeSystem.hasHandbrake)
+                {
+                    car.brakeSystem.SetHandbrakePosition(1f);
+                    Terminal.Log($"Applied handbrake on {car.logicCar.ID}");
+                }
+            }
         }
 
     }
