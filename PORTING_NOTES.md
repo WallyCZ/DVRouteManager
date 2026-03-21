@@ -7,132 +7,101 @@
 
 ---
 
-## Current Status: **BUILD SUCCESSFUL** ✓
-The project compiles with zero C# errors as of 2026-03-20.
-DLL deployed to: `D:\SteamLibrary\steamapps\common\Derail Valley\Mods\DVRouteManager\DVRouteManager.dll`
+## Current Status: **LOADING IN-GAME** ✓
+As of 2026-03-21:
+- Mod loads successfully (no ReflectionTypeLoadException)
+- CommsRadio mode appears and is navigable
+- Route computing throws "promise-style task" error → FIXED (removed `.Start()` call)
+- Next session: test full route set → switch → drive flow in-game
+
+### Known remaining issues to test/fix:
+- [ ] Route computing result — does pathfinding actually work end-to-end?
+- [ ] Junction switching — does it correctly switch junctions along the route?
+- [ ] RouteTracker — does it track progress and detect arrival correctly?
+- [ ] LocoAI — untested in new DV
+- [ ] PathMapMarkers — map dot positions may be wrong (coordinate space guessed)
+- [ ] Audio clips — not tested (stoptrain, trainend, wrongway etc.)
 
 ---
 
-## Phase 1: Project File & References
+## Deploy Steps (each session)
+```
+1. Build:
+   "C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe" "D:\Documents\DVRouteManager\DVRouteManager\DVDRouteManager.csproj"
+   (PostBuildEvent fails — ignore, DLL is in bin\Debug\)
+
+2. Copy:
+   DVRouteManager\bin\Debug\DVRouteManager.dll  →  DV\Mods\DVRouteManager\
+   DVRouteManager\bin\Debug\Priority Queue.dll  →  DV\Mods\DVRouteManager\   ← required!
+```
+
+---
+
+## Phase 1: Project File & References ✓
 - [x] Fix .csproj DLL paths (C:\Program Files (x86)\Steam → D:\SteamLibrary)
 - [x] Add CommsRadioAPI.dll reference
 - [x] Keep OptimizedPriorityQueue NuGet (downloaded 4.2.0 manually to packages/)
 - [x] Remove DV.Teleporters reference (removed from game)
 - [x] Add DV.RailTrack.dll reference
 - [x] Add WorldStreamer.dll reference (contains WorldMover class)
+- [x] `Priority Queue.dll` must be copied to Mods\DVRouteManager\ alongside the main DLL
 
-## Phase 2: API Breaking Changes (Source Files)
-
-### RailTrack API
-- [x] `RailTrack.logicTrack.xxx` → `RailTrack.LogicTrack().xxx` — ALL files
-  - Fixed: PathFinder.cs, RailTrackExtension.cs, Route.cs, RouteTracker.cs, RouteCommand.cs, LocoAI.cs, PathMapMarkers.cs
+## Phase 2: API Breaking Changes ✓
+- [x] `RailTrack.logicTrack.xxx` → `RailTrack.LogicTrack().xxx` (all files)
 - [x] `RailTrackRegistry.Instance.AllTracks` → `RailTrackRegistryBase.RailTracks`
-  - Fixed: PathFinder.cs, RouteCommand.cs
 - [x] `onTrackBogies` → `.BogiesOnTrack()` extension method
-  - Fixed: RailTrackExtension.cs, RouteTracker.cs
-- [x] `SingletonBehaviour<IdGenerator>.Instance.logicCarToTrainCar` → `SingletonBehaviour<TrainCarRegistry>.Instance.logicCarToTrainCar`
-  - Fixed: RouteTask.cs
-
-### Module.cs
-- [x] Keep `www.isHttpError` / `www.isNetworkError` (DV's Unity version still uses old API)
-- [x] `controlsOverrider.EngineOnReader` check removed — fails naturally if engine is off
-- [x] Removed unused `using DV.Teleporters;`, `using DV.Simulation.Cars;`
-
-### RouteTracker.cs
-- [x] `Mathd.Clamp01` → `Mathf.Clamp01` (in DEBUG block, line 360)
-
-### PathMapMarkers.cs
-- [x] `WorldMap` removed from DV — removed usage, use `mapController.transform` as parent
-- [x] `mapController.shopMarkerPrefab` now private — access via FieldInfo reflection
-- [x] `GetMapPosition(Vector3, Vector2)` → `GetMapPosition(Vector3 absPosition, bool dynamic)` via reflection
-- [x] `WorldMover` is in WorldStreamer.dll (global namespace) — added assembly reference
-- [x] Coordinate fix: `pointPos + WorldMover.currentMove` = absolute position for new API
-
-### LocoCruiseControl.cs
+- [x] `SingletonBehaviour<IdGenerator>` → `TrainCarRegistry.Instance` (direct subclass access)
+- [x] `AppUtil.IsPaused` → `AppUtil.Instance.IsTimePaused`
+- [x] `Mathd.Clamp01` → `Mathf.Clamp01`
+- [x] `WorldMap` removed — use `MapMarkersController` directly, `mapController.transform` as parent
+- [x] `MapMarkersController.shopMarkerPrefab` private → FieldInfo reflection
+- [x] `GetMapPosition(Vector3, Vector2)` → `GetMapPosition(Vector3, bool)` via reflection
 - [x] `LocoCruiseControl.IsActive` → `LocoCruiseControl.IsSet`
-- [x] `TargetSpeed` (static) → `LocoCruiseControl.GetTargetSpeed()` (returns float?)
+- [x] `Utils.CycleEnum<T>()` → `(T)Utils.NextEnumItem(value)`
+- [x] `using DV.Simulation.Cars` needed for SimController in Module.cs
 
-## Phase 3: CommsRadio Rewrite (MAJOR)
-- [x] Removed all 15 old CommsRadio page files from .csproj
-- [x] Created new `CommsRadio\RouteManagerStates.cs` using AStateBehaviour pattern
-- [x] `LCDArrowState.Both` doesn't exist → replaced with `LCDArrowState.Right`
-- [x] `Utils.CycleEnum` → `Utils.NextEnumItem()` (returns object, needs cast)
+## Phase 3: CommsRadio Rewrite ✓
+- [x] Replaced 15 old page files with single `CommsRadio\RouteManagerStates.cs`
+- [x] New pattern: `AStateBehaviour` subclasses, registered via `CommsRadioMode.Create()`
+- [x] Registration waits for `CommsRadioController` to exist (coroutine, like RouteSetter)
+- [x] `task.Start()` removed — `DoCommand` is async (hot task, already running)
+- [x] `LCDArrowState.Both` → `LCDArrowState.Right`
 - [x] `LocoAI.StartAI()` takes `RouteTracker` argument
 
-### States implemented in RouteManagerStates.cs:
-- RouteManagerInitialState (entry, ButtonBehaviourType.Regular required)
-- RouteManagerMainMenuState (scrollable: New route / Active route / Cruise Control / Loco AI / Settings)
-- RouteManagerNewRouteState (Loco→job, Loco→track, job cars→job)
-- RouteManagerSelectJobState (lists JobBooklet.allExistingJobBooklets)
-- RouteManagerSelectTrackState (lists all named tracks from RailTrackRegistryBase.RailTracks)
-- RouteManagerComputingState (async pathfinding via Module.StartCoroutine + OnUpdate polling)
-- RouteManagerMessageState (display result/error)
-- RouteManagerRouteInfoState (shows route info, clear option)
-- RouteManagerCruiseControlState (toggle/adjust cruise control)
-- RouteManagerLocoAIState (start LocoAI)
-- RouteManagerSettingsState (cycle ReversingStrategy)
+### States in RouteManagerStates.cs:
+- `RouteManagerInitialState` — entry point
+- `RouteManagerMainMenuState` — New route / Active route / Cruise Control / Loco AI / Settings
+- `RouteManagerNewRouteState` — Loco→job / Loco→track / Job cars→job
+- `RouteManagerSelectJobState` — lists job booklets
+- `RouteManagerSelectTrackState` — lists named tracks
+- `RouteManagerComputingState` — async pathfinding, polls via OnUpdate()
+- `RouteManagerMessageState` — result/error display
+- `RouteManagerRouteInfoState` — active route info + clear
+- `RouteManagerCruiseControlState` — toggle/adjust cruise
+- `RouteManagerLocoAIState` — start auto-drive
+- `RouteManagerSettingsState` — cycle ReversingStrategy
 
-## Phase 4: Module.cs CommsRadio Registration
-- [x] Replaced old reflection-based Harmony patch with CommsRadioAPI
-- [x] `CommsRadioMode.Create(new RouteManagerInitialState(), new Color(0.5f, 0.5f, 0.5f))`
-- [x] RemoveCommsRouteManager() is no-op (CommsRadioAPI doesn't support runtime removal)
-
-## Phase 5: Info.json & Build
-- [ ] Update Info.json version to 0.4.0
-- [ ] Add CommsRadioAPI dependency to Info.json (if supported by UMM)
-- [x] Build succeeded with zero C# errors
+## Phase 4: Info.json
+- [x] `Requirements: ["CommsRadioAPI"]` added (ensures correct load order)
+- [x] `DisplayName: "Route Manager (Overhauled)"`
+- [ ] Bump version to 0.4.0 when ready to release
 
 ---
 
-## Key API Reference
+## Key API Quick Reference
 
-### DV API Changes (old → new)
-- `RailTrack.logicTrack` → `RailTrack.LogicTrack()` extension method (DV.RailTrack.dll)
-- `Track.RailTrack()` extension method to go the other way
-- `RailTrackRegistry.Instance.AllTracks` → `RailTrackRegistryBase.RailTracks`
-- `RailTrack.onTrackBogies` (private field) → `RailTrack.BogiesOnTrack()` extension method
-- `IdGenerator.logicCarToTrainCar` → `TrainCarRegistry.logicCarToTrainCar`
-- `WorldMap` → removed, use `MapMarkersController` directly
-- `MapMarkersController.shopMarkerPrefab` → now private `[SerializeField]`, access via reflection
-- `GetMapPosition(Vector3, Vector2)` → `GetMapPosition(Vector3 absPosition, bool dynamic)` (still private, still reflection)
-- `WorldMover` class → in `WorldStreamer.dll`, global namespace, `currentMove` is a static Vector3
-- `DV.OriginShift.OriginShift.currentMove` is the new static version (both exist)
-- `LocoCruiseControl.IsActive` → `LocoCruiseControl.IsSet`
-- `Utils.CycleEnum<T>()` → `Utils.NextEnumItem(value)` returns `object` (cast needed)
+| Old | New |
+|-----|-----|
+| `RailTrack.logicTrack` | `RailTrack.LogicTrack()` |
+| `RailTrackRegistry.Instance.AllTracks` | `RailTrackRegistryBase.RailTracks` |
+| `RailTrack.onTrackBogies` | `RailTrack.BogiesOnTrack()` |
+| `SingletonBehaviour<IdGenerator>.Instance` | `TrainCarRegistry.Instance` |
+| `AppUtil.IsPaused` | `AppUtil.Instance.IsTimePaused` |
+| `WorldMap` (removed) | use `MapMarkersController` |
+| `LocoCruiseControl.IsActive` | `LocoCruiseControl.IsSet` |
+| `Utils.CycleEnum<T>()` | `(T)Utils.NextEnumItem(value)` |
+| `task.Start()` on async task | don't call Start() |
 
-### CommsRadioAPI Pattern
-```csharp
-// Registration (Module.cs):
-CommsRadioMode.Create(new RouteManagerInitialState(), new Color(0.5f, 0.5f, 0.5f));
-
-// State class:
-internal class MyState : AStateBehaviour {
-    public MyState() : base(new CommsRadioState(
-        titleText: "Title",
-        contentText: "Content",
-        actionText: "Action",
-        lcd: new LCDData(LCDArrowState.Right, 0),
-        buttonBehaviour: ButtonBehaviourType.Regular)) { }
-
-    public override AStateBehaviour OnAction(CommsRadioUtility utility, InputAction action) {
-        switch (action) {
-            case InputAction.Activate: return new NextState();
-            case InputAction.Up: return new MyState(index - 1);
-            case InputAction.Down: return new MyState(index + 1);
-            default: throw new ArgumentException();
-        }
-    }
-
-    // Optional: for auto-transitions (polling)
-    public override AStateBehaviour OnUpdate(CommsRadioUtility utility) {
-        if (someCondition) return new NextState();
-        return null; // stay in current state
-    }
-}
-```
-
-### Build Command
-```
-"C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe" "D:\Documents\DVRouteManager\DVRouteManager\DVDRouteManager.csproj"
-```
-(PostBuildEvent will fail with $(SolutionName) undefined — ignore, DLL is still built to bin\Debug\)
+**WorldMover**: in `WorldStreamer.dll`, global namespace. `WorldMover.currentMove` still works.
+**SingletonBehaviour**: in `DV.Utils.dll`. Access via subclass directly (e.g. `AppUtil.Instance`).
+**DV.OriginShift.OriginShift.currentMove** also exists as a static equivalent.
