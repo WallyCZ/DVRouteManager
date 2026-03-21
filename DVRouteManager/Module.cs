@@ -3,7 +3,11 @@ using CommsRadioAPI;
 using DV;
 using DV.Logic.Job;
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
 using DV.Teleporters;
+=======
+using DV.Simulation.Cars;
+>>>>>>> Stashed changes
 =======
 using DV.Simulation.Cars;
 >>>>>>> Stashed changes
@@ -62,6 +66,9 @@ namespace DVRouteManager
 =======
                 SimController simController = car.GetComponent<SimController>();
                 if (simController == null || simController.controlsOverrider == null)
+<<<<<<< Updated upstream
+>>>>>>> Stashed changes
+=======
 >>>>>>> Stashed changes
                 {
                     if (!dieselSim.engineOn)
@@ -69,6 +76,7 @@ namespace DVRouteManager
                         throw new CommandException("Engine off");
                     }
                 }
+<<<<<<< Updated upstream
 <<<<<<< Updated upstream
                 else
                 {
@@ -89,6 +97,8 @@ namespace DVRouteManager
 
                 LocoControllerShunter shunterController = car.GetComponent<LocoControllerShunter>();
 =======
+=======
+>>>>>>> Stashed changes
 
                 // Engine-on check removed; control fails naturally if engine is off
   
