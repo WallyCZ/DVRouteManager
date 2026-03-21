@@ -101,7 +101,7 @@ namespace DVRouteManager
                 }
                 else if (RouteTracker.TrackState == RouteTracker.TrackingState.RightHeading)
                 {
-                    if (RouteTracker.DistanceToFinish < 50.0f && !RouteTracker.Route.LastTrack.logicTrack.IsFree(RouteTracker.Trainset)) //finds all couplers not only on right rail
+                    if (RouteTracker.DistanceToFinish < 50.0f && !RouteTracker.Route.LastTrack.LogicTrack().IsFree(RouteTracker.Trainset)) //finds all couplers not only on right rail
                     {
                         TargetSpeed = COUPLER_APPROACH_SPEED;
                     }
@@ -157,7 +157,7 @@ namespace DVRouteManager
 
                 if (RouteTracker.TrackState == RouteTracker.TrackingState.OnFinish)
                 {
-                    if (RouteTracker.Route.LastTrack.logicTrack.IsFree(RouteTracker.Trainset))
+                    if (RouteTracker.Route.LastTrack.LogicTrack().IsFree(RouteTracker.Trainset))
                     {
                         break;
                     }

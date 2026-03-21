@@ -26,7 +26,7 @@ namespace DVRouteManager
 
             if (fromIsOutBranch)
             {
-                //Terminal.Log($"{from?.logicTrack.ID.FullID} -> {to?.logicTrack.ID.FullID} fromIsOutBranch");
+                //Terminal.Log($"{from?.LogicTrack().ID.FullID} -> {to?.LogicTrack().ID.FullID} fromIsOutBranch");
                 return false;
             }
 
@@ -34,7 +34,7 @@ namespace DVRouteManager
 
             if (currentIsOutBranch)
             {
-                //Terminal.Log($"{from?.logicTrack.ID.FullID} -> {to?.logicTrack.ID.FullID} currentIsOutBranch {junction.inBranch.track.logicTrack.ID.FullID}");
+                //Terminal.Log($"{from?.LogicTrack().ID.FullID} -> {to?.LogicTrack().ID.FullID} currentIsOutBranch {junction.inBranch.track.LogicTrack().ID.FullID}");
                 return junction.inBranch.track == to;
             }
 
@@ -55,7 +55,7 @@ namespace DVRouteManager
         /// <returns></returns>
         public static bool IsDirectLengthEnough(this RailTrack current, RailTrack from, double length)
         {
-            if (current.logicTrack.length > length)
+            if (current.LogicTrack().length > length)
                 return true;
 
             bool isFromInJuction = current.inIsConnected && current.GetAllInBranches().Any(b => b.track == from);
@@ -65,7 +65,7 @@ namespace DVRouteManager
             {
                 foreach (var branch in current.GetAllInBranches())
                 {
-                    if (CanGoToDirectly(current, from, branch.track) && IsDirectLengthEnough(branch.track, current, length - current.logicTrack.length))
+                    if (CanGoToDirectly(current, from, branch.track) && IsDirectLengthEnough(branch.track, current, length - current.LogicTrack().length))
                         return true;
                 }
             }
@@ -74,7 +74,7 @@ namespace DVRouteManager
             {
                 foreach (var branch in current.GetAllOutBranches())
                 {
-                    if (CanGoToDirectly(current, from, branch.track) && IsDirectLengthEnough(branch.track, current, length - current.logicTrack.length))
+                    if (CanGoToDirectly(current, from, branch.track) && IsDirectLengthEnough(branch.track, current, length - current.LogicTrack().length))
                         return true;
                 }
             }
@@ -92,14 +92,14 @@ namespace DVRouteManager
             if (current.inIsConnected)
             {
 
-                //Terminal.Log($"IN: {from?.logicTrack.ID.FullID} -> {current.logicTrack.ID.FullID} -> {to?.logicTrack.ID.FullID}");
+                //Terminal.Log($"IN: {from?.LogicTrack().ID.FullID} -> {current.LogicTrack().ID.FullID} -> {to?.LogicTrack().ID.FullID}");
                 if (isInJuction && CanGoThroughJunctionDirectly(current, current.inJunction, from, to))
                     return true;
             }
 
             if (current.outIsConnected)
             {
-                //Terminal.Log($"OUT: {from?.logicTrack.ID.FullID} -> {current.logicTrack.ID.FullID} -> {to?.logicTrack.ID.FullID}");
+                //Terminal.Log($"OUT: {from?.LogicTrack().ID.FullID} -> {current.LogicTrack().ID.FullID} -> {to?.LogicTrack().ID.FullID}");
                 if (isOutJuction && CanGoThroughJunctionDirectly(current, current.outJunction, from, to))
                     return true;
 
@@ -223,7 +223,7 @@ namespace DVRouteManager
                 return IsSectorFree(current, sectorLength, true);
 
 #if DEBUG
-            Terminal.Log($"IsSectorFreeFromJunction: not connected to given junction... track {current.logicTrack.ID.FullID} junction {junction?.GetInstanceID()} inJunction {current.inJunction?.GetInstanceID()} outJunction {current.outJunction?.GetInstanceID()}");
+            Terminal.Log($"IsSectorFreeFromJunction: not connected to given junction... track {current.LogicTrack().ID.FullID} junction {junction?.GetInstanceID()} inJunction {current.inJunction?.GetInstanceID()} outJunction {current.outJunction?.GetInstanceID()}");
 #endif
             return true;
         }
@@ -233,16 +233,16 @@ namespace DVRouteManager
             if (fromOutConnection)
             {
 #if DEBUG2
-                current.onTrackBogies.ToList().ForEach(b => Terminal.Log($"SpanOut: {b.traveller.Span}"));
+                current.BogiesOnTrack().ToList().ForEach(b => Terminal.Log($"SpanOut: {b.traveller.Span}"));
 #endif
-                return current.onTrackBogies.All(b => b.traveller.Span < (current.logicTrack.length - sectorLength));
+                return current.BogiesOnTrack().All(b => b.traveller.Span < (current.LogicTrack().length - sectorLength));
             }
             else
             {
 #if DEBUG2
-                current.onTrackBogies.ToList().ForEach(b => Terminal.Log($"SpanIn: {b.traveller.Span}"));
+                current.BogiesOnTrack().ToList().ForEach(b => Terminal.Log($"SpanIn: {b.traveller.Span}"));
 #endif
-                return current.onTrackBogies.All(b => b.traveller.Span > sectorLength);
+                return current.BogiesOnTrack().All(b => b.traveller.Span > sectorLength);
             }
         }
 
@@ -279,7 +279,7 @@ namespace DVRouteManager
 
             float realSpeed = 0;
 
-            float trackLength = (float)current.logicTrack.length;
+            float trackLength = (float)current.LogicTrack().length;
 
             float lastAngle = 0;
 
@@ -439,7 +439,7 @@ namespace DVRouteManager
 
         public static (RailTrack, double, bool) GetAheadTrack(this RailTrack current, double currentCarSpan, bool direction, double aheadDistance)
         {
-            aheadDistance -= direction ? current.logicTrack.length - currentCarSpan : currentCarSpan;
+            aheadDistance -= direction ? current.LogicTrack().length - currentCarSpan : currentCarSpan;
 
             while(aheadDistance >= 0.0f)
             {
@@ -454,13 +454,13 @@ namespace DVRouteManager
 
                 current = nextTrack;
 
-                aheadDistance -= current.logicTrack.length;
+                aheadDistance -= current.LogicTrack().length;
             }
 
-            double span = direction ? current.logicTrack.length + aheadDistance : -aheadDistance;
-            if(span > current.logicTrack.length)
+            double span = direction ? current.LogicTrack().length + aheadDistance : -aheadDistance;
+            if(span > current.LogicTrack().length)
             {
-                span = current.logicTrack.length;
+                span = current.LogicTrack().length;
             }
 
             return (current, span, direction);

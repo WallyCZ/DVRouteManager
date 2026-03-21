@@ -227,7 +227,7 @@ namespace DVRouteManager
             {
                 get
                 {
-                    return TrackDirection ? span : track.logicTrack.length - span;
+                    return TrackDirection ? span : track.LogicTrack().length - span;
                 }
             }
 
@@ -275,8 +275,8 @@ namespace DVRouteManager
                         }
 
 #if DEBUG2
-                        Terminal.Log($"first track {firstCarPosition.track?.logicTrack.ID.FullID} next {firstCarPosition.trackNext?.logicTrack.ID.FullID} span {firstCarPosition.span}");
-                        Terminal.Log($"last track {lastCarPosition.track?.logicTrack.ID.FullID} next {lastCarPosition.trackNext?.logicTrack.ID.FullID} span {lastCarPosition.span}");
+                        Terminal.Log($"first track {firstCarPosition.track?.LogicTrack().ID.FullID} next {firstCarPosition.trackNext?.LogicTrack().ID.FullID} span {firstCarPosition.span}");
+                        Terminal.Log($"last track {lastCarPosition.track?.LogicTrack().ID.FullID} next {lastCarPosition.trackNext?.LogicTrack().ID.FullID} span {lastCarPosition.span}");
 #endif
 
                         UpdateCurrentTrack(firstCarPosition, lastCarPosition);
@@ -335,10 +335,10 @@ namespace DVRouteManager
 #if DEBUG
             if(!isOnTrack)
             {
-                Terminal.Log($"firstPathData: {firstPathData?.prevTrack?.logicTrack.ID.FullID}->{firstPathData?.currentTrack.logicTrack.ID.FullID}->{firstPathData?.nextTrack?.logicTrack.ID.FullID}");
-                Terminal.Log($"lastPathData: {lastPathData?.prevTrack?.logicTrack.ID.FullID}->{lastPathData?.currentTrack.logicTrack.ID.FullID}->{lastPathData?.nextTrack?.logicTrack.ID.FullID}");
-                Terminal.Log($"firstCar {firstCar.dvCar.logicCar.ID}: {firstCar.trackPrev?.logicTrack.ID.FullID}->{firstCar.track?.logicTrack.ID.FullID}->{firstCar.trackNext?.logicTrack.ID.FullID}");
-                Terminal.Log($"lastCar {lastCar.dvCar.logicCar.ID}: {lastCar.trackPrev?.logicTrack.ID.FullID}->{lastCar.track?.logicTrack.ID.FullID}->{lastCar.trackNext?.logicTrack.ID.FullID}");
+                Terminal.Log($"firstPathData: {firstPathData?.prevTrack?.LogicTrack().ID.FullID}->{firstPathData?.currentTrack.LogicTrack().ID.FullID}->{firstPathData?.nextTrack?.LogicTrack().ID.FullID}");
+                Terminal.Log($"lastPathData: {lastPathData?.prevTrack?.LogicTrack().ID.FullID}->{lastPathData?.currentTrack.LogicTrack().ID.FullID}->{lastPathData?.nextTrack?.LogicTrack().ID.FullID}");
+                Terminal.Log($"firstCar {firstCar.dvCar.logicCar.ID}: {firstCar.trackPrev?.LogicTrack().ID.FullID}->{firstCar.track?.LogicTrack().ID.FullID}->{firstCar.trackNext?.LogicTrack().ID.FullID}");
+                Terminal.Log($"lastCar {lastCar.dvCar.logicCar.ID}: {lastCar.trackPrev?.LogicTrack().ID.FullID}->{lastCar.track?.LogicTrack().ID.FullID}->{lastCar.trackNext?.LogicTrack().ID.FullID}");
             }
 #endif
             if(isOnTrack)
@@ -357,7 +357,7 @@ namespace DVRouteManager
             float carSpeed = Mathf.Abs(car.dvCar.GetForwardSpeed());
             float metersAhead = carSpeed * carSpeed + 50.0f;
             var (aheadTrack, aheadSpan, direction) = car.track.GetAheadTrack(car.span, car.TrackDirection, metersAhead);
-            float span = (float)Mathd.Clamp01(aheadSpan / aheadTrack.logicTrack.length);
+            float span = Mathf.Clamp01((float)(aheadSpan / aheadTrack.LogicTrack().length));
             Vector3 tan = aheadTrack.curve.GetTangentAt(span );
             if (direction)
                 tan = -tan;
@@ -367,12 +367,12 @@ namespace DVRouteManager
 
 
 
-            //Terminal.Log($"isOnTrack: {isOnTrack} firstCar: {car == firstCar} trackDistance: {pathData?.distanceFromStart} posFromstart: {DistanceTraveled} posToFinish: {DistanceToFinish} carTrack: {car?.track?.logicTrack.ID.FullID} carNext: {car?.trackNext?.logicTrack.ID.FullID} carMoving: {car?.moving} carVelocity: {car?.dvCar.GetVelocity().sqrMagnitude} carChangedTrack: {car?.changedTrack}  tan: {tan}");
+            //Terminal.Log($"isOnTrack: {isOnTrack} firstCar: {car == firstCar} trackDistance: {pathData?.distanceFromStart} posFromstart: {DistanceTraveled} posToFinish: {DistanceToFinish} carTrack: {car?.track?.LogicTrack().ID.FullID} carNext: {car?.trackNext?.LogicTrack().ID.FullID} carMoving: {car?.moving} carVelocity: {car?.dvCar.GetVelocity().sqrMagnitude} carChangedTrack: {car?.changedTrack}  tan: {tan}");
             float angleDiff = Utils.GetAngleDifference(lastAngle, angle);
             RecommendedSpeed = RailTrackExtension.AngleDiffToSpeed(angleDiff, (float) (posFromStart - lastPos));
             angleDiff = angleDiff * 180f / Mathf.PI / Mathf.Abs((float)(posFromStart - lastPos));
 
-            Terminal.Log($"isOnTrack: {isOnTrack} car: {car.dvCar.ID} posFromstart: {DistanceTraveled} posToFinish: {DistanceToFinish} carTrack: {car?.track?.logicTrack.ID.FullID} carNext: {car?.trackNext?.logicTrack.ID.FullID} angle: {Mathf.Atan2(tand.y, tand.x)} ahead {aheadTrack.logicTrack.ID.FullID} aheadSpan {aheadSpan} aheadDir {direction} carSpan {car.span} carDir {car.TrackDirection} angleDiff {angleDiff} {RecommendedSpeed}");
+            Terminal.Log($"isOnTrack: {isOnTrack} car: {car.dvCar.ID} posFromstart: {DistanceTraveled} posToFinish: {DistanceToFinish} carTrack: {car?.track?.LogicTrack().ID.FullID} carNext: {car?.trackNext?.LogicTrack().ID.FullID} angle: {Mathf.Atan2(tand.y, tand.x)} ahead {aheadTrack.LogicTrack().ID.FullID} aheadSpan {aheadSpan} aheadDir {direction} carSpan {car.span} carDir {car.TrackDirection} angleDiff {angleDiff} {RecommendedSpeed}");
             lastAngle = angle;
             lastPos = posFromStart;
 #endif
@@ -419,9 +419,9 @@ namespace DVRouteManager
             }
             else if (TrackState == TrackingState.RightHeading)
             {
-                if (firstCar.track.logicTrack == CurrentTask.DestinationTrack || lastCar.track.logicTrack == CurrentTask.DestinationTrack)
+                if (firstCar.track.LogicTrack() == CurrentTask.DestinationTrack || lastCar.track.LogicTrack() == CurrentTask.DestinationTrack)
                 {
-                    if ((firstCar.track.logicTrack == CurrentTask.DestinationTrack && lastCar.track.logicTrack == CurrentTask.DestinationTrack)
+                    if ((firstCar.track.LogicTrack() == CurrentTask.DestinationTrack && lastCar.track.LogicTrack() == CurrentTask.DestinationTrack)
                         || CurrentTask.DestinationTrack.IsOccupiedAtLeast(0.8f)
                         || ! CurrentTask.DestinationTrack.IsFree(Trainset))
                     {
@@ -490,8 +490,8 @@ namespace DVRouteManager
             while (true)
             {
 #if DEBUG2
-                Terminal.Log($"In: {junction.inBranch.track.onTrackBogies.Count} {junction.inBranch.track.onTrackBogies.Count}");
-                junction.outBranches.ForEach(b => Terminal.Log($"Out: {b.track.logicTrack?.GetCarsPartiallyOnTrack().Count}"));
+                Terminal.Log($"In: {junction.inBranch.track.BogiesOnTrack().Count} {junction.inBranch.track.BogiesOnTrack().Count}");
+                junction.outBranches.ForEach(b => Terminal.Log($"Out: {b.track.LogicTrack()?.GetCarsPartiallyOnTrack().Count}"));
 #endif
                 if (junction.IsFree())
                     break;
