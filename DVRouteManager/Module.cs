@@ -231,7 +231,7 @@ namespace DVRouteManager
             generalAudioSource.loop = false;
             generalAudioSource.maxDistance = 300f;
             //generalAudioSource.clip = Module.stopTrainClip;
-            generalAudioSource.spatialBlend = 1f;
+            generalAudioSource.spatialBlend = 0f;
             generalAudioSource.dopplerLevel = 0f;
             generalAudioSource.spread = 10f;
         }
