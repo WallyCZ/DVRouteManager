@@ -47,6 +47,14 @@ namespace DVRouteManager
         }
 
         private static Dictionary<string, LocoAI> locosAI = new Dictionary<string, LocoAI>();
+        public static LocoAI TryGetLocoAI(TrainCar car)
+        {
+            if (car == null) return null;
+            LocoAI locoAI;
+            locosAI.TryGetValue(car.logicCar.ID, out locoAI);
+            return locoAI;
+        }
+
         public static LocoAI GetLocoAI(TrainCar car)
         {
             LocoAI locoAI;
@@ -61,7 +69,7 @@ namespace DVRouteManager
                 // Engine-on check removed; control fails naturally if engine is off
 
                 ILocomotiveRemoteControl remote = car.GetComponent<ILocomotiveRemoteControl>();
-                locoAI = new LocoAI(remote);
+                locoAI = new LocoAI(remote, car);
                 locosAI.Add(car.logicCar.ID, locoAI);
             }
 
@@ -312,30 +320,6 @@ namespace DVRouteManager
                 Module.ActiveRoute.RouteTracker.NotifyTrainEnd();
             }
 
-            if (Module.settings.CruiseControlToggle.Down())
-            {
-                LocoCruiseControl.ToggleCruiseControl();
-            }
-
-            if (Module.settings.CruiseControl30.Down())
-            {
-                LocoCruiseControl.ToggleCruiseControl(30.0f);
-            }
-
-            if (Module.settings.CruiseControl60.Down())
-            {
-                LocoCruiseControl.ToggleCruiseControl(60.0f);
-            }
-
-            if (Module.settings.CruiseControlMinus.Down())
-            {
-                LocoCruiseControl.UpdateTargetSpeed(-5.0f);
-            }
-
-            if (Module.settings.CruiseControlPlus.Down())
-            {
-                LocoCruiseControl.UpdateTargetSpeed(+5.0f);
-            }
         }
 
 

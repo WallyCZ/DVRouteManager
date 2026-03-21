@@ -1,4 +1,5 @@
 ﻿using CommandTerminal;
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
@@ -23,12 +24,13 @@ namespace DVRouteManager
             running = true;
             while (running)
             {
-                if(Route != null && Module.ActiveRoute?.RouteTracker?.Route == Route)
+                var tracker = Module.ActiveRoute?.RouteTracker;
+                if (Route != null && tracker != null)
                 {
-                    DestroyPoints(Module.ActiveRoute.RouteTracker.DistanceToFinish);
+                    DestroyPoints(tracker.DistanceToFinish);
                 }
 
-                yield return new WaitForSeconds(3.0f);
+                yield return new WaitForSeconds(1.0f);
             }
         }
 
@@ -71,7 +73,6 @@ namespace DVRouteManager
             const double step = 200;
             double next = step;
             Color color = Color.green;
-
             route.WalkPath((walkData) =>
             {
                 double length = walkData.currentTrack.LogicTrack().length;
@@ -92,20 +93,37 @@ namespace DVRouteManager
                         localDistance = 1.0f - localDistance;
                     }
 
+                    try
+                    {
+                        if (walkData.currentTrack.curve == null)
+                        {
+                            next += step;
+                            continue;
+                        }
 
-                    Vector3 pointPos = walkData.currentTrack.curve.GetPointAt(localDistance); ;
+                        Vector3 pointPos = walkData.currentTrack.curve.GetPointAt(localDistance);
+                        Vector3 absPosition = pointPos - WorldMover.currentMove;
 
-                    Vector3 absPosition = pointPos + WorldMover.currentMove;
-                    Vector3 mapPosition = (Vector3)GetMapPositionMethod.Invoke(mapController, new object[] { absPosition, false });
+                        object mapPosResult = GetMapPositionMethod.Invoke(mapController, new object[] { absPosition, false });
+                        if (mapPosResult == null)
+                        {
+                            next += step;
+                            continue;
+                        }
+                        Vector3 mapPosition = (Vector3)mapPosResult;
 
-                    GameObject point = UnityEngine.Object.Instantiate<GameObject>(prefab, mapController.transform);
-                    point.transform.localPosition = mapPosition + Vector3.up * 0.0002f;
-                    point.transform.localScale *= 0.5f;
-                    MeshRenderer mr = point.GetComponent<MeshRenderer>();
+                        GameObject point = UnityEngine.Object.Instantiate<GameObject>(prefab, mapController.transform);
+                        point.transform.localPosition = mapPosition + Vector3.up * 0.0002f;
+                        point.transform.localScale *= 0.5f;
+                        MeshRenderer mr = point.GetComponent<MeshRenderer>();
+                        mr.material.color = color;
 
-                    mr.material.color = color;
-
-                    points.Add( (route.Length - next, point ));
+                        points.Add((route.Length - next, point));
+                    }
+                    catch (Exception ex)
+                    {
+                        Terminal.Log($"[PathMapMarkers] exception at dist {next}m on track {walkData.currentTrack?.LogicTrack()?.ID?.FullID}: {ex.Message}");
+                    }
 
                     next += step;
                 }

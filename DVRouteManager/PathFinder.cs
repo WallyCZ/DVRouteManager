@@ -174,7 +174,7 @@ namespace DVRouteManager
 
                 foreach (var neighbor in neighbors)
                 {
-                    if(bannedTransitions != null && bannedTransitions.All(t=> t.track == current && t.nextTrack == neighbor))
+                    if(bannedTransitions != null && bannedTransitions.Any(t=> t.track == current && t.nextTrack == neighbor))
                     {
                         Terminal.Log($"{current.LogicTrack().ID.FullID}->{neighbor.LogicTrack().ID.FullID} banned");
                         continue;
@@ -199,6 +199,17 @@ namespace DVRouteManager
                     // compute exact cost
                     //double newCost = costSoFar[current] + neighbor.LogicTrack().length;
                     double newCost = costSoFar[current] + neighbor.LogicTrack().length / neighbor.GetAverageSpeed();
+
+                    // Penalise routing through named yard sidings (storage/loading/in/out/parking)
+                    // when they are not the destination. These tracks have cars spawned on them by
+                    // the job system so passing through them causes unnecessary conflicts.
+                    // Main-line tracks (type "M") and unnamed connector tracks are fine to use.
+                    if (neighbor != start && neighbor != goal)
+                    {
+                        var nid = neighbor.LogicTrack().ID;
+                        if (!string.IsNullOrEmpty(nid.yardId) && !nid.FullID.EndsWith("-M"))
+                            newCost += 50000.0;
+                    }
 
                     if ( ! isDirect)
                     {

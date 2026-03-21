@@ -40,7 +40,6 @@ namespace DVRouteManager.CommsRadio
         {
             "New route",
             "Active route",
-            "Cruise Control",
             "Loco AI",
             "Settings",
             "< Back"
@@ -80,10 +79,9 @@ namespace DVRouteManager.CommsRadio
                             if (Module.ActiveRoute.IsSet)
                                 return new RouteManagerRouteInfoState();
                             return new RouteManagerMessageState("No active route", new RouteManagerMainMenuState());
-                        case 2: return new RouteManagerCruiseControlState();
-                        case 3: return new RouteManagerLocoAIState();
-                        case 4: return new RouteManagerSettingsState();
-                        case 5: return new RouteManagerInitialState();
+                        case 2: return new RouteManagerLocoAIMenuState();
+                        case 3: return new RouteManagerSettingsState();
+                        case 4: return new RouteManagerInitialState();
                         default: return new RouteManagerInitialState();
                     }
                 default:
@@ -429,40 +427,113 @@ namespace DVRouteManager.CommsRadio
     }
 
     // ─────────────────────────────────────────────────────────────
-    //  Cruise Control state
+    //  Loco AI menu
     // ─────────────────────────────────────────────────────────────
-    public class RouteManagerCruiseControlState : AStateBehaviour
+    public class RouteManagerLocoAIMenuState : AStateBehaviour
     {
-        public RouteManagerCruiseControlState()
-            : base(BuildState())
-        { }
+        private readonly int _index;
 
-        private static CommsRadioState BuildState()
+        // Items are built dynamically so "Stop AI" reflects current state
+        private static string[] GetItems()
         {
-            bool active = LocoCruiseControl.IsSet;
-            float speed = LocoCruiseControl.GetTargetSpeed() ?? 0f;
-            string info = active
-                ? $"Active - {speed:0}km/h\nUp/Down: ±5km/h"
-                : "Inactive\nActivate to toggle";
-            return new CommsRadioState("CRUISE CONTROL", info,
-                active ? "TOGGLE OFF" : "TOGGLE ON",
-                LCDArrowState.Right, active ? LEDState.On : LEDState.Off,
-                ButtonBehaviourType.Override);
+            TrainCar loco = PlayerManager.LastLoco;
+            LocoAI ai = Module.TryGetLocoAI(loco);
+            bool active = ai != null && (ai.IsRunning || ai.IsFreightHaulActive);
+            var items = new System.Collections.Generic.List<string> { "Freight haul" };
+            if (active) items.Add("Stop AI");
+            items.Add("< Back");
+            return items.ToArray();
+        }
+
+        public RouteManagerLocoAIMenuState(int index = 0)
+            : base(BuildState(index))
+        {
+            _index = index;
+        }
+
+        private static CommsRadioState BuildState(int index)
+        {
+            var items = GetItems();
+            int i = Mathf.Clamp(index, 0, items.Length - 1);
+            return new CommsRadioState("LOCO AI", items[i], "SELECT",
+                LCDArrowState.Right, LEDState.Off, ButtonBehaviourType.Override);
         }
 
         public override AStateBehaviour OnAction(CommsRadioUtility utility, InputAction action)
         {
+            var items = GetItems();
             switch (action)
             {
-                case InputAction.Activate:
-                    LocoCruiseControl.ToggleCruiseControl();
-                    return new RouteManagerCruiseControlState();
                 case InputAction.Up:
-                    LocoCruiseControl.UpdateTargetSpeed(+5.0f);
-                    return new RouteManagerCruiseControlState();
+                    return new RouteManagerLocoAIMenuState((_index + 1) % items.Length);
                 case InputAction.Down:
-                    LocoCruiseControl.UpdateTargetSpeed(-5.0f);
-                    return new RouteManagerCruiseControlState();
+                    return new RouteManagerLocoAIMenuState((_index - 1 + items.Length) % items.Length);
+                case InputAction.Activate:
+                    string selected = items[Mathf.Clamp(_index, 0, items.Length - 1)];
+                    if (selected == "Freight haul")
+                        return BuildFreightHaulJobSelect();
+                    if (selected == "Stop AI")
+                    {
+                        TrainCar loco = PlayerManager.LastLoco;
+                        Module.TryGetLocoAI(loco)?.StopAll();
+                        return new RouteManagerMessageState("AI stopped", new RouteManagerLocoAIMenuState());
+                    }
+                    return new RouteManagerMainMenuState();
+                default:
+                    return this;
+            }
+        }
+
+        private static AStateBehaviour BuildFreightHaulJobSelect()
+        {
+            if (PlayerManager.LastLoco == null)
+                return new RouteManagerMessageState("Board a locomotive first", new RouteManagerLocoAIMenuState());
+
+            var booklets = new System.Collections.Generic.List<JobBooklet>(JobBooklet.allExistingJobBooklets);
+            if (booklets.Count == 0)
+                return new RouteManagerMessageState("No job booklets found", new RouteManagerLocoAIMenuState());
+            if (booklets.Count == 1)
+                return new RouteManagerFreightHaulDestSelectState(booklets[0].job);
+            return new RouteManagerFreightHaulJobSelectState(booklets);
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    //  Freight haul – job selection (when > 1 job)
+    // ─────────────────────────────────────────────────────────────
+    public class RouteManagerFreightHaulJobSelectState : AStateBehaviour
+    {
+        private readonly List<JobBooklet> _booklets;
+        private readonly int _index;
+
+        public RouteManagerFreightHaulJobSelectState(List<JobBooklet> booklets, int index = 0)
+            : base(BuildState(booklets, index))
+        {
+            _booklets = booklets;
+            _index = Mathf.Clamp(index, 0, booklets.Count);
+        }
+
+        private static CommsRadioState BuildState(List<JobBooklet> booklets, int index)
+        {
+            int i = Mathf.Clamp(index, 0, booklets.Count);
+            string content = i < booklets.Count ? booklets[i].job.ID : "< Back";
+            return new CommsRadioState("SELECT JOB", content, "SELECT",
+                LCDArrowState.Right, LEDState.Off, ButtonBehaviourType.Override);
+        }
+
+        public override AStateBehaviour OnAction(CommsRadioUtility utility, InputAction action)
+        {
+            int total = _booklets.Count + 1;
+            switch (action)
+            {
+                case InputAction.Up:
+                    return new RouteManagerFreightHaulJobSelectState(_booklets, (_index + 1) % total);
+                case InputAction.Down:
+                    return new RouteManagerFreightHaulJobSelectState(_booklets, (_index - 1 + total) % total);
+                case InputAction.Activate:
+                    if (_index >= _booklets.Count)
+                        return new RouteManagerLocoAIMenuState();
+                    return new RouteManagerFreightHaulDestSelectState(_booklets[_index].job);
                 default:
                     return this;
             }
@@ -470,7 +541,165 @@ namespace DVRouteManager.CommsRadio
     }
 
     // ─────────────────────────────────────────────────────────────
-    //  Loco AI state
+    //  Freight haul – destination/task selection within a job
+    // ─────────────────────────────────────────────────────────────
+    public class RouteManagerFreightHaulDestSelectState : AStateBehaviour
+    {
+        private readonly Job _job;
+        private readonly List<RouteTask> _tasks;
+        private readonly int _index;
+
+        public RouteManagerFreightHaulDestSelectState(Job job, int index = 0)
+            : base(BuildState(job, GetTasks(job), index))
+        {
+            _job = job;
+            _tasks = GetTasks(job);
+            _index = Mathf.Clamp(index, 0, _tasks.Count);
+        }
+
+        private RouteManagerFreightHaulDestSelectState(Job job, List<RouteTask> tasks, int index)
+            : base(BuildState(job, tasks, index))
+        {
+            _job = job;
+            _tasks = tasks;
+            _index = index;
+        }
+
+        private static List<RouteTask> GetTasks(Job job)
+        {
+            var list = new List<RouteTask>();
+            RouteTaskChain chain = RouteTaskChain.FromDVJob(job);
+            while (chain != null)
+            {
+                if (chain.tasks != null)
+                    list.AddRange(chain.tasks);
+                chain = chain.nextTasks;
+            }
+            return list;
+        }
+
+        private static CommsRadioState BuildState(Job job, List<RouteTask> tasks, int index)
+        {
+            int total = tasks.Count + 1;
+            int i = Mathf.Clamp(index, 0, total - 1);
+            string content = i < tasks.Count
+                ? tasks[i].DestinationTrack?.ID?.FullID ?? "Unknown"
+                : "< Back";
+            return new CommsRadioState("SELECT DEST", content, "SELECT",
+                LCDArrowState.Right, LEDState.Off, ButtonBehaviourType.Override);
+        }
+
+        public override AStateBehaviour OnAction(CommsRadioUtility utility, InputAction action)
+        {
+            int total = _tasks.Count + 1;
+            switch (action)
+            {
+                case InputAction.Up:
+                    return new RouteManagerFreightHaulDestSelectState(_job, _tasks, (_index + 1) % total);
+                case InputAction.Down:
+                    return new RouteManagerFreightHaulDestSelectState(_job, _tasks, (_index - 1 + total) % total);
+                case InputAction.Activate:
+                    if (_index >= _tasks.Count)
+                        return new RouteManagerLocoAIMenuState();
+                    return new RouteManagerFreightHaulStartState(_tasks[_index]);
+                default:
+                    return this;
+            }
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    //  Freight haul – start (kicks off AI, shows running state)
+    // ─────────────────────────────────────────────────────────────
+    public class RouteManagerFreightHaulStartState : AStateBehaviour
+    {
+        private readonly RouteTask _task;
+
+        public RouteManagerFreightHaulStartState(RouteTask task)
+            : base(new CommsRadioState("LOCO AI", "Starting freight haul...", "WAIT"))
+        {
+            _task = task;
+            StartHaul();
+        }
+
+        private void StartHaul()
+        {
+            try
+            {
+                TrainCar loco = PlayerManager.LastLoco;
+                if (loco == null) return;
+                LocoAI ai = Module.GetLocoAI(loco);
+                ai.StartFreightHaul(_task, loco);
+            }
+            catch (Exception e)
+            {
+                Module.mod.Logger.Log("StartFreightHaul error: " + e.Message);
+            }
+        }
+
+        public override AStateBehaviour OnUpdate(CommsRadioUtility utility)
+        {
+            TrainCar loco = PlayerManager.LastLoco;
+            LocoAI ai = Module.TryGetLocoAI(loco);
+            if (ai != null && (ai.IsRunning || ai.IsFreightHaulActive))
+                return new RouteManagerFreightHaulRunningState();
+            // Still starting up — wait one more tick
+            return this;
+        }
+
+        public override AStateBehaviour OnAction(CommsRadioUtility utility, InputAction action)
+        {
+            if (action == InputAction.Down)
+            {
+                Module.TryGetLocoAI(PlayerManager.LastLoco)?.StopAll();
+                return new RouteManagerLocoAIMenuState();
+            }
+            return this;
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    //  Freight haul – running status display
+    // ─────────────────────────────────────────────────────────────
+    public class RouteManagerFreightHaulRunningState : AStateBehaviour
+    {
+        public RouteManagerFreightHaulRunningState()
+            : base(BuildState())
+        { }
+
+        private static CommsRadioState BuildState()
+        {
+            string status = "Running...";
+            var tracker = Module.ActiveRoute?.RouteTracker;
+            if (tracker != null)
+                status = $"To go: {(tracker.DistanceToFinish / 1000.0):0.0}km";
+            return new CommsRadioState("LOCO AI", status, "STOP",
+                LCDArrowState.Off, LEDState.On, ButtonBehaviourType.Override);
+        }
+
+        public override AStateBehaviour OnUpdate(CommsRadioUtility utility)
+        {
+            TrainCar loco = PlayerManager.LastLoco;
+            LocoAI ai = Module.TryGetLocoAI(loco);
+            if (ai == null || (!ai.IsRunning && !ai.IsFreightHaulActive))
+                return new RouteManagerMessageState("Freight haul complete!", new RouteManagerLocoAIMenuState());
+            // Refresh display
+            return new RouteManagerFreightHaulRunningState();
+        }
+
+        public override AStateBehaviour OnAction(CommsRadioUtility utility, InputAction action)
+        {
+            if (action == InputAction.Activate)
+            {
+                Module.TryGetLocoAI(PlayerManager.LastLoco)?.StopAll();
+                return new RouteManagerMessageState("AI stopped", new RouteManagerLocoAIMenuState());
+            }
+            return this;
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    //  Loco AI state (legacy – kept for reference, not in menu)
     // ─────────────────────────────────────────────────────────────
     public class RouteManagerLocoAIState : AStateBehaviour
     {
