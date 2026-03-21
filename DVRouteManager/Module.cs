@@ -2,15 +2,6 @@
 using CommsRadioAPI;
 using DV;
 using DV.Logic.Job;
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
-using DV.Teleporters;
-=======
-using DV.Simulation.Cars;
->>>>>>> Stashed changes
-=======
-using DV.Simulation.Cars;
->>>>>>> Stashed changes
 using DVRouteManager.CommsRadio;
 using HarmonyLib;
 using SimpleJson;
@@ -60,49 +51,14 @@ namespace DVRouteManager
             LocoAI locoAI;
             if (!locosAI.TryGetValue(car.logicCar.ID, out locoAI))
             {
-<<<<<<< Updated upstream
-                DieselLocoSimulation dieselSim = car.GetComponent<DieselLocoSimulation>();
-                if (dieselSim != null)
-=======
                 SimController simController = car.GetComponent<SimController>();
                 if (simController == null || simController.controlsOverrider == null)
-<<<<<<< Updated upstream
->>>>>>> Stashed changes
-=======
->>>>>>> Stashed changes
                 {
-                    if (!dieselSim.engineOn)
-                    {
-                        throw new CommandException("Engine off");
-                    }
+                    throw new CommandException("Unsupported locomotive");
                 }
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
-                else
-                {
-                    ShunterLocoSimulation shunterSim = car.GetComponent<ShunterLocoSimulation>();
-                    if (shunterSim != null)
-                    {
-                        if (!shunterSim.engineOn)
-                        {
-                            throw new CommandException("Engine off");
-                        }
-
-                    }
-                    else
-                    {
-                        throw new CommandException("Loco not compatible");
-                    }
-                }
-
-                LocoControllerShunter shunterController = car.GetComponent<LocoControllerShunter>();
-=======
-=======
->>>>>>> Stashed changes
 
                 // Engine-on check removed; control fails naturally if engine is off
-  
->>>>>>> Stashed changes
+
                 ILocomotiveRemoteControl remote = car.GetComponent<ILocomotiveRemoteControl>();
                 locoAI = new LocoAI(remote);
                 locosAI.Add(car.logicCar.ID, locoAI);

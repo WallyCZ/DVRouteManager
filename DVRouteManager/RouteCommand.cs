@@ -188,23 +188,10 @@ namespace DVRouteManager
                 }
 
 
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
-                RailTrack startTrack = RailTrackRegistry.AllTracks.FirstOrDefault((RailTrack track) => track?.logicTrack.ID.FullID == args[1].String);
-
-                RailTrack goalTrack = RailTrackRegistry.AllTracks.FirstOrDefault((RailTrack track) => track?.logicTrack.ID.FullID == args[3].String);
-=======
-                RailTrack startTrack = RailTrackRegistryBase.RailTracks.FirstOrDefault((RailTrack track) => track?.LogicTrack().ID.FullID == args[1].String);
-
-                RailTrack goalTrack = RailTrackRegistryBase.RailTracks.FirstOrDefault((RailTrack track) => track?.LogicTrack().ID.FullID == args[3].String);
->>>>>>> Stashed changes
-
-=======
                 RailTrack startTrack = RailTrackRegistryBase.RailTracks.FirstOrDefault((RailTrack track) => track?.LogicTrack().ID.FullID == args[1].String);
 
                 RailTrack goalTrack = RailTrackRegistryBase.RailTracks.FirstOrDefault((RailTrack track) => track?.LogicTrack().ID.FullID == args[3].String);
 
->>>>>>> Stashed changes
                 RouteTaskChain chain = RouteTaskChain.FromDestination(goalTrack.LogicTrack(), trainset);
                 var tracker = new RouteTracker(chain, false);
 
@@ -273,15 +260,7 @@ namespace DVRouteManager
 #if DEBUG
             else if (args[0].String == "track")
             {
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
-                var track = RailTrackRegistry.AllTracks.Where(t => t.logicTrack.ID.FullID.ToLower() == args[1].String.ToLower()).FirstOrDefault();
-=======
                 var track = RailTrackRegistryBase.RailTracks.Where(t => t.LogicTrack().ID.FullID.ToLower() == args[1].String.ToLower()).FirstOrDefault();
->>>>>>> Stashed changes
-=======
-                var track = RailTrackRegistryBase.RailTracks.Where(t => t.LogicTrack().ID.FullID.ToLower() == args[1].String.ToLower()).FirstOrDefault();
->>>>>>> Stashed changes
                 if(track == null)
                 {
                     throw new CommandException("track not found");
@@ -333,15 +312,7 @@ namespace DVRouteManager
                     return;
                 }
 
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
-                RailTrack goalTrack = RailTrackRegistry.AllTracks.FirstOrDefault((RailTrack track) => track?.logicTrack.ID.FullID == args[1].String);
-=======
                 RailTrack goalTrack = RailTrackRegistryBase.RailTracks.FirstOrDefault((RailTrack track) => track?.LogicTrack().ID.FullID == args[1].String);
->>>>>>> Stashed changes
-=======
-                RailTrack goalTrack = RailTrackRegistryBase.RailTracks.FirstOrDefault((RailTrack track) => track?.LogicTrack().ID.FullID == args[1].String);
->>>>>>> Stashed changes
                 if (goalTrack == null)
                 {
                     throw new CommandException("Goal track not found");
