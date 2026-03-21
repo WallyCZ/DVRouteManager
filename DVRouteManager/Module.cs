@@ -284,7 +284,7 @@ namespace DVRouteManager
             if (active)
             {
                 StartInitCoroutines();
-                AddCommsRouteManager();
+                AsyncManager.StartCoroutine(AddCommsRouteManagerWhenReady());
             }
             else
             {
@@ -341,8 +341,11 @@ namespace DVRouteManager
 
         private static CommsRadioMode commsRadioMode;
 
-        private static void AddCommsRouteManager()
+        private static IEnumerator AddCommsRouteManagerWhenReady()
         {
+            while (UnityEngine.Object.FindObjectOfType<CommsRadioController>() == null)
+                yield return null;
+
             try
             {
                 commsRadioMode = CommsRadioMode.Create(new RouteManagerInitialState(), new Color(0.5f, 0.5f, 0.5f));
