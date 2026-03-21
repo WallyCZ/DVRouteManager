@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(xargs head:*)",
+      "Bash(gh api:*)",
+      "Bash(cmd.exe:*)",
+      "Bash(dotnet tool:*)",
+      "Bash(ilspycmd:*)",
+      "Bash(\"/c/Program Files/dotnet/dotnet.exe\" build:*)",
+      "Bash(cd /tmp)",
+      "Bash(unzip -o pq.nupkg \"lib/net45/Priority Queue.dll\" -d pq_extract)",
+      "Bash(dotnet build:*)",
+      "Bash(cmd:*)",
+      "Bash(\"/c/Program Files/Microsoft Visual Studio/2022/Community/MSBuild/Current/Bin/MSBuild.exe\":*)",
+      "Bash(do:*)",
+      "Bash(mkdir:*)"
+    ]
+  }
+}

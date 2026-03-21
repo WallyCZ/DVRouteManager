@@ -60,10 +60,12 @@ namespace DVRouteManager
             DestroyAllPoints();
             Route = route;
 
-            WorldMap map = (WorldMap)Resources.FindObjectsOfTypeAll(typeof(WorldMap)).FirstOrDefault();
             MapMarkersController mapController = (MapMarkersController)Resources.FindObjectsOfTypeAll(typeof(MapMarkersController)).FirstOrDefault();
+            if (mapController == null) return;
             MethodInfo GetMapPositionMethod = mapController.GetType().GetMethod("GetMapPosition", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
-            GameObject prefab = mapController.shopMarkerPrefab;
+            FieldInfo shopMarkerField = mapController.GetType().GetField("shopMarkerPrefab", BindingFlags.Instance | BindingFlags.NonPublic);
+            GameObject prefab = shopMarkerField?.GetValue(mapController) as GameObject;
+            if (prefab == null || GetMapPositionMethod == null) return;
 
             double totalLength = 0;
             const double step = 200;
@@ -72,7 +74,7 @@ namespace DVRouteManager
 
             route.WalkPath((walkData) =>
             {
-                double length = walkData.currentTrack.logicTrack.length;
+                double length = walkData.currentTrack.LogicTrack().length;
 
                 if(route.Reverses.ContainsKey(walkData.junctionId))
                 {
@@ -93,9 +95,10 @@ namespace DVRouteManager
 
                     Vector3 pointPos = walkData.currentTrack.curve.GetPointAt(localDistance); ;
 
-                    Vector3 mapPosition = (Vector3)GetMapPositionMethod.Invoke(mapController, new object[] { pointPos - WorldMover.currentMove, map.triggerExtentsXZ });
+                    Vector3 absPosition = pointPos + WorldMover.currentMove;
+                    Vector3 mapPosition = (Vector3)GetMapPositionMethod.Invoke(mapController, new object[] { absPosition, false });
 
-                    GameObject point = UnityEngine.Object.Instantiate<GameObject>(prefab, map.transform);
+                    GameObject point = UnityEngine.Object.Instantiate<GameObject>(prefab, mapController.transform);
                     point.transform.localPosition = mapPosition + Vector3.up * 0.0002f;
                     point.transform.localScale *= 0.5f;
                     MeshRenderer mr = point.GetComponent<MeshRenderer>();

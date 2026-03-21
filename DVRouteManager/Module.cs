@@ -1,7 +1,12 @@
 ﻿using CommandTerminal;
+using CommsRadioAPI;
 using DV;
 using DV.Logic.Job;
+<<<<<<< Updated upstream
 using DV.Teleporters;
+=======
+using DV.Simulation.Cars;
+>>>>>>> Stashed changes
 using DVRouteManager.CommsRadio;
 using HarmonyLib;
 using SimpleJson;
@@ -10,11 +15,9 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
-using System.Xml.Schema;
 using UnityAsync;
 using UnityEngine;
 using UnityEngine.Networking;
-using UnityEngine.SceneManagement;
 using UnityModManagerNet;
 using static UnityModManagerNet.UnityModManager;
 
@@ -53,14 +56,20 @@ namespace DVRouteManager
             LocoAI locoAI;
             if (!locosAI.TryGetValue(car.logicCar.ID, out locoAI))
             {
+<<<<<<< Updated upstream
                 DieselLocoSimulation dieselSim = car.GetComponent<DieselLocoSimulation>();
                 if (dieselSim != null)
+=======
+                SimController simController = car.GetComponent<SimController>();
+                if (simController == null || simController.controlsOverrider == null)
+>>>>>>> Stashed changes
                 {
                     if (!dieselSim.engineOn)
                     {
                         throw new CommandException("Engine off");
                     }
                 }
+<<<<<<< Updated upstream
                 else
                 {
                     ShunterLocoSimulation shunterSim = car.GetComponent<ShunterLocoSimulation>();
@@ -79,6 +88,11 @@ namespace DVRouteManager
                 }
 
                 LocoControllerShunter shunterController = car.GetComponent<LocoControllerShunter>();
+=======
+
+                // Engine-on check removed; control fails naturally if engine is off
+  
+>>>>>>> Stashed changes
                 ILocomotiveRemoteControl remote = car.GetComponent<ILocomotiveRemoteControl>();
                 locoAI = new LocoAI(remote);
                 locosAI.Add(car.logicCar.ID, locoAI);
@@ -356,91 +370,24 @@ namespace DVRouteManager
         }
 
 
-        static CommsRadioController commsRadioController;
-        static CommsRouteManager commsRouteManager;
+        private static CommsRadioMode commsRadioMode;
 
         private static void AddCommsRouteManager()
         {
-
-            if (commsRadioController == null)
-            {
-                commsRadioController = Resources.FindObjectsOfTypeAll<CommsRadioController>().FirstOrDefault();
-                if (commsRadioController == null)
-                {
-                    Module.mod.Logger.Log("commsRadioController empty");
-                    return;
-                }
-            }
-
             try
             {
-                var modes = Traverse.Create(commsRadioController).Field("allModes").GetValue<List<ICommsRadioMode>>();
-
-                if (modes != null && modes.Count > 0)
-                {
-                    GameObject objToSpawn = new GameObject("CommsRouteManager");
-                    objToSpawn.AddComponent<CommsRouteManager>();
-
-                    CommsRouteManager radioMode = objToSpawn.GetComponent<CommsRouteManager>();
-                    radioMode.display = Traverse.Create(modes[0]).Field("display").GetValue<CommsRadioDisplay>();
-                    objToSpawn.transform.parent = (modes[0] as MonoBehaviour).gameObject.transform;
-                    objToSpawn.SetActive(true);
-                    modes.Add(radioMode);
-                    commsRouteManager = radioMode;
-                    Module.mod.Logger.Log("Comm radio mode added");
-                }
-                else
-                {
-                    Module.mod.Logger.Log($"No commsradio modes found");
-                }
-
+                commsRadioMode = CommsRadioMode.Create(new RouteManagerInitialState(), new Color(0.5f, 0.5f, 0.5f));
+                Module.mod.Logger.Log("Comm radio mode added via CommsRadioAPI");
             }
             catch (Exception e)
             {
-                Module.mod.Logger.Log("Error in mod CommsRadioController registration: " + e.Message);
+                Module.mod.Logger.Log("Error registering CommsRadio mode: " + e.Message);
             }
         }
 
         private static void RemoveCommsRouteManager()
         {
-
-            if (commsRadioController == null)
-            {
-                Module.mod.Logger.Log("commsRadioController empty");
-                return;
-            }
-
-            try
-            {
-                var modes = Traverse.Create(commsRadioController).Field("allModes").GetValue<List<ICommsRadioMode>>();
-
-                if (modes != null && commsRouteManager != null)
-                {
-                    modes.Remove(commsRouteManager);
-                    Module.mod.Logger.Log("Comm radio mode removed");
-                }
-                else
-                {
-                    Module.mod.Logger.Log($"No commsradio modes found");
-                }
-
-            }
-            catch (Exception e)
-            {
-                Module.mod.Logger.Log("Error in mod CommsRadioController removing: " + e.Message);
-            }
-        }
-
-
-        [HarmonyPatch(typeof(CommsRadioController), "Awake")]
-        static class TrainSpawnerPlus_Patch
-        {
-            static void Postfix(CommsRadioController __instance)
-            {
-                commsRadioController = __instance;
-                Module.mod.Logger.Log("commsRadioController set");
-                AddCommsRouteManager();
-            }
+            // CommsRadioAPI does not support runtime removal; mode persists until game restart
         }
     }
 }

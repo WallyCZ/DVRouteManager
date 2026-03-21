@@ -174,7 +174,7 @@ namespace DVRouteManager
             cars.ForEach(car =>
             {
                 TrainCar trainCar;
-                if (!SingletonBehaviour<IdGenerator>.Instance.logicCarToTrainCar.TryGetValue(car, out trainCar))
+                if (!SingletonBehaviour<TrainCarRegistry>.Instance.logicCarToTrainCar.TryGetValue(car, out trainCar))
                     return;
 
                 if (!TrainSets.Contains(trainCar.trainset))

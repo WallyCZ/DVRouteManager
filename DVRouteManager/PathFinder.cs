@@ -95,8 +95,13 @@ namespace DVRouteManager
         {
             Terminal.Log($"{start.ID.FullID} -> {goal.ID.FullID}");
 
+<<<<<<< Updated upstream
             RailTrack startTrack = RailTrackRegistry.AllTracks.FirstOrDefault((RailTrack track) => track?.logicTrack.ID.FullID == start.ID.FullID);
             RailTrack goalTrack = RailTrackRegistry.AllTracks.FirstOrDefault((RailTrack track) => track?.logicTrack.ID.FullID == goal.ID.FullID);
+=======
+            RailTrack startTrack = RailTrackRegistryBase.RailTracks.FirstOrDefault((RailTrack track) => track?.LogicTrack().ID.FullID == start.ID.FullID);
+            RailTrack goalTrack = RailTrackRegistryBase.RailTracks.FirstOrDefault((RailTrack track) => track?.LogicTrack().ID.FullID == goal.ID.FullID);
+>>>>>>> Stashed changes
 
             if (startTrack == null || goalTrack == null)
             {
@@ -152,7 +157,7 @@ namespace DVRouteManager
                 RailTrack prev = null;
                 cameFrom.TryGetValue(current, out prev);
 
-                string debug = $"ID: {current.logicTrack.ID.FullID} Prev: {prev?.logicTrack.ID.FullID}";
+                string debug = $"ID: {current.LogicTrack().ID.FullID} Prev: {prev?.LogicTrack().ID.FullID}";
 
                 List<RailTrack> neighbors = new List<RailTrack>();
 
@@ -176,14 +181,14 @@ namespace DVRouteManager
                 {
                     if(bannedTransitions != null && bannedTransitions.All(t=> t.track == current && t.nextTrack == neighbor))
                     {
-                        Terminal.Log($"{current.logicTrack.ID.FullID}->{neighbor.logicTrack.ID.FullID} banned");
+                        Terminal.Log($"{current.LogicTrack().ID.FullID}->{neighbor.LogicTrack().ID.FullID} banned");
                         continue;
                     }
 
                     //if non start/end track is not free omit it
-                    if (neighbor != start && neighbor != goal && ! neighbor.logicTrack.IsFree(carsToIgnore))
+                    if (neighbor != start && neighbor != goal && ! neighbor.LogicTrack().IsFree(carsToIgnore))
                     {
-                        Terminal.Log($"{neighbor.logicTrack.ID.FullID} not free");
+                        Terminal.Log($"{neighbor.LogicTrack().ID.FullID} not free");
                         continue;
                     }
 
@@ -192,20 +197,20 @@ namespace DVRouteManager
 
                     if ( ! allowReverse && ! isDirect)
                     {
-                        Terminal.Log($"{neighbor.logicTrack.ID.FullID} reverse needed");
+                        Terminal.Log($"{neighbor.LogicTrack().ID.FullID} reverse needed");
                         continue;
                     }
 
                     // compute exact cost
-                    //double newCost = costSoFar[current] + neighbor.logicTrack.length;
-                    double newCost = costSoFar[current] + neighbor.logicTrack.length / neighbor.GetAverageSpeed();
+                    //double newCost = costSoFar[current] + neighbor.LogicTrack().length;
+                    double newCost = costSoFar[current] + neighbor.LogicTrack().length / neighbor.GetAverageSpeed();
 
                     if ( ! isDirect)
                     {
                         // if we can't fit consist on this track to reverse, drop this neighbor
                         if ( prev != null && !current.IsDirectLengthEnough(prev, consistLength))
                         {
-                            Terminal.Log($"{neighbor.logicTrack.ID.FullID} not long enough to reverse");
+                            Terminal.Log($"{neighbor.LogicTrack().ID.FullID} not long enough to reverse");
                             continue;
                         }
 
@@ -226,7 +231,7 @@ namespace DVRouteManager
                             cameFrom.Remove(neighbor);
                         }
 
-                        //Terminal.Log($"neighbor {neighbor.logicTrack.ID.FullID} update {newCost}");
+                        //Terminal.Log($"neighbor {neighbor.LogicTrack().ID.FullID} update {newCost}");
 
                         costSoFar.Add(neighbor, newCost);
                         cameFrom.Add(neighbor, current);
@@ -272,7 +277,7 @@ namespace DVRouteManager
                     }
 
                     prefix += ":";
-                    return prefix + t.logicTrack.ID.FullID;
+                    return prefix + t.LogicTrack().ID.FullID;
                 })
                 .Aggregate(string.Empty, (a, b) =>
                 {
@@ -305,7 +310,7 @@ namespace DVRouteManager
             {
                 if (!cameFrom.ContainsKey(current))
                 {
-                    Terminal.Log($"cameFrom does not contain current {current.logicTrack.ID.FullID}");
+                    Terminal.Log($"cameFrom does not contain current {current.LogicTrack().ID.FullID}");
                     return null;
                 }
 

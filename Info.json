@@ -1,9 +1,10 @@
 {
     "Id": "DVRouteManager",
-    "DisplayName": "Route Manager",
+    "DisplayName": "Route Manager (Overhauled)",
     "Author": "Wally",
     "Version": "0.3.3",
     "EntryMethod": "DVRouteManager.Module.Load",
     "HomePage": "https://www.nexusmods.com/derailvalley/mods/157",
-    "Repository": "https://raw.githubusercontent.com/WallyCZ/DVRouteManager/master/Repository.json"
+    "Repository": "https://raw.githubusercontent.com/WallyCZ/DVRouteManager/master/Repository.json",
+    "Requirements": ["CommsRadioAPI"]
 }
