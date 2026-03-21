@@ -61,11 +61,12 @@ Open the Comms Radio in-cab and cycle to **Route Manager**. From there you can:
 | Build | ✅ Compiles |
 | Comms Radio UI | ✅ Working |
 | Route pathfinding | 🧪 Testing |
-| Junction switching | 🧪 Testing |
+| Junction switching | ✅ Working |
 | Cruise control | 🧪 Testing |
 | Locomotive AI | 🧪 Testing |
 | Freight haul AI | 🧪 Testing |
-| Map markers | 🧪 Testing |
+| Map markers | ✅ Working |
+| Audio cues | 🧪 Testing — fixed `spatialBlend` (was 3D, now 2D) |
 
 ---
 
