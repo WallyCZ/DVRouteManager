@@ -2,6 +2,7 @@
 using CommsRadioAPI;
 using DV;
 using DV.Logic.Job;
+using DV.Simulation.Cars;
 using DVRouteManager.CommsRadio;
 using HarmonyLib;
 using SimpleJson;
@@ -188,7 +189,9 @@ namespace DVRouteManager
 
             Terminal.Shell.Commands.Remove("route");
             Terminal.Shell.AddCommand("route", RouteCommand.DoTerminalCommand, 0, -1, "", null);
-            Terminal.Autocomplete.Register("route");
+            CommandInfo ci = new CommandInfo();
+            ci.name = "route";
+            Terminal.Autocomplete.Register(ci);
             Terminal.Log("Route command registered");
         }
 

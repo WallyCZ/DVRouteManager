@@ -15,7 +15,8 @@
       "Bash(do:*)",
       "Bash(mkdir:*)",
       "Bash(python3:*)",
-      "Bash(/c/Users/odwal/AppData/Local/Programs/Python/Python311/python:*)"
+      "Bash(/c/Users/odwal/AppData/Local/Programs/Python/Python311/python:*)",
+      "Bash(git:*)"
     ]
   }
 }
