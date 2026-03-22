@@ -158,12 +158,12 @@ namespace DVRouteManager
 
                 if (current.outIsConnected)
                 {
-                    neighbors.AddRange(current.GetAllOutBranches().Select(b => b.track));
+                    neighbors.AddRange(current.GetAllOutBranches().Where(b => b != null).Select(b => b.track).Where(t => t != null));
                 }
 
                 if (current.inIsConnected)
                 {
-                    neighbors.AddRange(current.GetAllInBranches().Select(b => b.track));
+                    neighbors.AddRange(current.GetAllInBranches().Where(b => b != null).Select(b => b.track).Where(t => t != null));
                 }
                 string branches = DumpNodes(neighbors, current);
                 debug += "\n" + $"all branches: {branches}";
@@ -174,16 +174,21 @@ namespace DVRouteManager
 
                 foreach (var neighbor in neighbors)
                 {
+                    if (neighbor == null) continue;
+
+                    Track neighborLogic = neighbor.LogicTrack();
+                    if (neighborLogic == null) continue;
+
                     if(bannedTransitions != null && bannedTransitions.Any(t=> t.track == current && t.nextTrack == neighbor))
                     {
-                        Terminal.Log($"{current.LogicTrack().ID.FullID}->{neighbor.LogicTrack().ID.FullID} banned");
+                        Terminal.Log($"{current.LogicTrack().ID.FullID}->{neighborLogic.ID.FullID} banned");
                         continue;
                     }
 
                     //if non start/end track is not free omit it
-                    if (neighbor != start && neighbor != goal && ! neighbor.LogicTrack().IsFree(carsToIgnore))
+                    if (neighbor != start && neighbor != goal && !neighborLogic.IsFree(carsToIgnore))
                     {
-                        Terminal.Log($"{neighbor.LogicTrack().ID.FullID} not free");
+                        Terminal.Log($"{neighborLogic.ID.FullID} not free");
                         continue;
                     }
 
@@ -192,13 +197,12 @@ namespace DVRouteManager
 
                     if ( ! allowReverse && ! isDirect)
                     {
-                        Terminal.Log($"{neighbor.LogicTrack().ID.FullID} reverse needed");
+                        Terminal.Log($"{neighborLogic.ID.FullID} reverse needed");
                         continue;
                     }
 
                     // compute exact cost
-                    //double newCost = costSoFar[current] + neighbor.LogicTrack().length;
-                    double newCost = costSoFar[current] + neighbor.LogicTrack().length / neighbor.GetAverageSpeed();
+                    double newCost = costSoFar[current] + neighborLogic.length / neighbor.GetAverageSpeed();
 
                     // Penalise routing through named yard sidings (storage/loading/in/out/parking)
                     // when they are not the destination. These tracks have cars spawned on them by
@@ -206,7 +210,7 @@ namespace DVRouteManager
                     // Main-line tracks (type "M") and unnamed connector tracks are fine to use.
                     if (neighbor != start && neighbor != goal)
                     {
-                        var nid = neighbor.LogicTrack().ID;
+                        var nid = neighborLogic.ID;
                         if (!string.IsNullOrEmpty(nid.yardId) && !nid.FullID.EndsWith("-M"))
                             newCost += 50000.0;
                     }

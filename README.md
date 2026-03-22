@@ -13,8 +13,9 @@ A mod for [Derail Valley](https://store.steampowered.com/app/588030/Derail_Valle
 - **Automatic junction switching** — switches are set as you drive along the planned route
 - **Comms Radio integration** — set routes, check status, and control the AI via the in-cab radio
 - **Cruise control** — PID-based speed controller; supports DM3 automatic gear shifting and overheating protection
-- **Locomotive AI** — fully automatic driving along a planned route, including reversing at junctions
+- **Locomotive AI** — fully automatic driving along a planned route, including reversing at junctions; drive to any destination with or without a job
 - **Freight haul AI** — fully automated multi-phase freight operations (route to cars → couple → release handbrakes → drive to destination → uncouple → apply handbrakes)
+- **DM3 speed cap** — AI limits the DM3 to 70 km/h to protect the drivetrain
 - **Map markers** — route is drawn on the in-game map
 
 ---
@@ -41,6 +42,7 @@ Open the Comms Radio in-cab and cycle to **Route Manager**. From there you can:
 - **New route** — set a route from your locomotive to a job destination or a specific track
 - **Active route** — view current route info, distance remaining, and clear it
 - **Loco AI** — start the locomotive AI driver or launch a full freight haul
+  - *Drive to destination*: pick any track from the list — AI drives there with no job required; sets active route and adjusts junctions
   - *Freight haul*: if you have multiple jobs or multiple destinations, you will be prompted to pick which to do first; the AI then handles all phases automatically
   - *Stop AI*: shown while AI is running — cancels the current operation cleanly
 - **Settings** — configure mod behaviour via UMM (F10)
@@ -96,6 +98,8 @@ Full overhaul to support the latest Derail Valley release, plus new AI features.
 **Locomotive AI (`LocoAI`)**
 - Competing mod compatibility: on AI start, disables DriverAssist cruise control and SteamCruiseControl via reflection so they don't fight the AI
 - New `StartFreightHaul` for fully automated freight operations
+- New "Drive to destination" mode — AI drives to any selected track without a job booklet; sets active route and adjusts junctions
+- DM3: AI enforces a 70 km/h speed cap to stay within the locomotive's safe operating range
 - `StopAll()` cleanly aborts both AI driving and any active freight haul
 
 **Freight haul AI (new)**
@@ -106,9 +110,13 @@ Full overhaul to support the latest Derail Valley release, plus new AI features.
 - Plays completion sound on success
 - Abortable at any phase via Comms Radio "Stop AI"
 
+**Bug fixes**
+- Fixed `ArgumentNullException: Value cannot be null. Parameter name: key` crash when routing with no job or with passenger jobs (CS-A2LP etc.) — null branch tracks and null Car entries in task data are now guarded
+- Fixed pathfinder null crash: branch track lists are filtered for null entries; `LogicTrack()` return is null-checked before use in A*
+
 **Comms Radio UI**
 - Main menu: New route / Active route / Loco AI / Settings / Back
-- Loco AI menu: Freight haul / Stop AI (when running) / Back
+- Loco AI menu: Freight haul / Drive to destination / Stop AI (when running) / Back
 - Job picker state (when player has multiple active jobs)
 - Destination picker state (when a job has multiple delivery tracks)
 - Running state: shows distance to go, STOP button
