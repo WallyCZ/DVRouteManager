@@ -212,13 +212,15 @@ namespace DVRouteManager.CommsRadio
         private readonly List<string> _trackIds;
         private readonly int _index;
         private readonly AStateBehaviour _cancelState;
+        private readonly bool _aiDrive;
 
-        public RouteManagerSelectTrackState(AStateBehaviour cancelState, int index = 0, List<string> trackIds = null)
+        public RouteManagerSelectTrackState(AStateBehaviour cancelState, int index = 0, List<string> trackIds = null, bool aiDrive = false)
             : base(BuildState(trackIds ?? LoadTrackIds(), index))
         {
             _cancelState = cancelState;
             _trackIds = trackIds ?? LoadTrackIds();
             _index = Mathf.Clamp(index, 0, Math.Max(0, _trackIds.Count));
+            _aiDrive = aiDrive;
         }
 
         private static List<string> LoadTrackIds()
@@ -252,20 +254,29 @@ namespace DVRouteManager.CommsRadio
             switch (action)
             {
                 case InputAction.Up:
-                    return new RouteManagerSelectTrackState(_cancelState, (_index + 1) % _trackIds.Count, _trackIds);
+                    return new RouteManagerSelectTrackState(_cancelState, (_index + 1) % _trackIds.Count, _trackIds, _aiDrive);
                 case InputAction.Down:
-                    return new RouteManagerSelectTrackState(_cancelState, (_index - 1 + _trackIds.Count) % _trackIds.Count, _trackIds);
+                    return new RouteManagerSelectTrackState(_cancelState, (_index - 1 + _trackIds.Count) % _trackIds.Count, _trackIds, _aiDrive);
                 case InputAction.Activate:
                     string selected = _trackIds[_index];
                     if (selected == "< Back") return _cancelState;
-                    CommandArg[] args = new[]
-                    {
-                        new CommandArg { String = "from" },
-                        new CommandArg { String = "loco" },
-                        new CommandArg { String = "to" },
-                        new CommandArg { String = selected }
-                    };
-                    return new RouteManagerComputingState(args, new RouteManagerMainMenuState());
+                    CommandArg[] args = _aiDrive
+                        ? new[]
+                        {
+                            new CommandArg { String = "auto" },
+                            new CommandArg { String = selected }
+                        }
+                        : new[]
+                        {
+                            new CommandArg { String = "from" },
+                            new CommandArg { String = "loco" },
+                            new CommandArg { String = "to" },
+                            new CommandArg { String = selected }
+                        };
+                    AStateBehaviour returnState = _aiDrive
+                        ? (AStateBehaviour)new RouteManagerLocoAIMenuState()
+                        : new RouteManagerMainMenuState();
+                    return new RouteManagerComputingState(args, returnState);
                 default:
                     return this;
             }
@@ -439,7 +450,7 @@ namespace DVRouteManager.CommsRadio
             TrainCar loco = PlayerManager.LastLoco;
             LocoAI ai = Module.TryGetLocoAI(loco);
             bool active = ai != null && (ai.IsRunning || ai.IsFreightHaulActive);
-            var items = new System.Collections.Generic.List<string> { "Freight haul" };
+            var items = new System.Collections.Generic.List<string> { "Freight haul", "Drive to destination" };
             if (active) items.Add("Stop AI");
             items.Add("< Back");
             return items.ToArray();
@@ -472,6 +483,12 @@ namespace DVRouteManager.CommsRadio
                     string selected = items[Mathf.Clamp(_index, 0, items.Length - 1)];
                     if (selected == "Freight haul")
                         return BuildFreightHaulJobSelect();
+                    if (selected == "Drive to destination")
+                    {
+                        if (PlayerManager.LastLoco == null)
+                            return new RouteManagerMessageState("Board a locomotive first", new RouteManagerLocoAIMenuState());
+                        return new RouteManagerSelectTrackState(new RouteManagerLocoAIMenuState(), aiDrive: true);
+                    }
                     if (selected == "Stop AI")
                     {
                         TrainCar loco = PlayerManager.LastLoco;

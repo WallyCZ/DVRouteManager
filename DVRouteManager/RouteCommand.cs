@@ -308,7 +308,7 @@ namespace DVRouteManager
                 if(args[1].String == "stop")
                 {
                     var locoAI = Module.GetLocoAI(trainCar);
-                    locoAI.Stop();
+                    locoAI.StopAll();
                     return;
                 }
 
@@ -318,14 +318,24 @@ namespace DVRouteManager
                     throw new CommandException("Goal track not found");
                 }
 
-                RouteTaskChain chain = RouteTaskChain.FromDestination(goalTrack.LogicTrack(), trainCar.trainset);
-                var tracker = new RouteTracker(chain, false);
-
                 Track startTrack = trainCar.trainset.firstCar.Bogies[0].track.LogicTrack();
+                Track destTrack = goalTrack.LogicTrack();
 
-                var route = await Route.FindRoute(startTrack, tracker.CurrentTask.DestinationTrack, ReversingStrategy.ChooseBest, trainCar.trainset);
+                var route = await Route.FindRoute(startTrack, destTrack, ReversingStrategy.ChooseBest, trainCar.trainset);
 
+                if (route == null)
+                {
+                    Module.ActiveRoute.ClearRoute();
+                    throw new CommandException("Path cannot be found");
+                }
+
+                Module.ActiveRoute.Route = route;
+                route.AdjustSwitches();
+
+                RouteTaskChain chain = RouteTaskChain.FromDestination(destTrack, trainCar.trainset);
+                var tracker = new RouteTracker(chain, false);
                 tracker.SetRoute(route, trainCar.trainset);
+                Module.ActiveRoute.RouteTracker = tracker;
 
                 var driver = Module.GetLocoAI(trainCar);
                 driver.StartAI(tracker);

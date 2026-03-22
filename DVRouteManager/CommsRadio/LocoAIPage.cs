@@ -24,7 +24,7 @@ namespace DVRouteManager.CommsRadio
         {
             return new List<MenuItem>()
             {
-                new MenuItem("Shunt to specific track", "Select", () => CreateTrackRoute()),
+                new MenuItem("Drive to destination", "Select", () => CreateTrackRoute()),
                 new MenuItem("Stop Loco AI", "Stop", () => Stop()),
                 GetExitMenu()
             };
@@ -47,7 +47,7 @@ namespace DVRouteManager.CommsRadio
                 {
                     await RouteCommand.DoCommand(args);
 
-                    DisplayText($"Going to {trackPage.SelectedTrack}", "");
+                    DisplayText($"AI driving to\n{trackPage.SelectedTrack}", "");
 
                     await new WaitForSeconds(1.0f);
 

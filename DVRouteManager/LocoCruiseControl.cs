@@ -30,6 +30,7 @@ namespace DVRouteManager
         private const float RPM_SHIFT_UP   = 800f;
         private const float RPM_SHIFT_DOWN = 600f;
         private const float SHIFT_COOLDOWN = 3.0f; // seconds between shifts
+        private const float DM3_MAX_SPEED  = 70f;  // km/h
 
         private float _lastGearRpm    = 0f;
         private float _lastShiftTime  = -999f;
@@ -82,9 +83,14 @@ namespace DVRouteManager
                 return 0.0f;
             }
 
-            // ── DM3: gear shift takes priority over the PID ──────────────────
-            if (_isDM3 && HandleDM3GearShift(dt))
-                return targetAcceleration; // PID skipped during shift
+            // ── DM3: cap speed and handle gear shift ─────────────────────────
+            if (_isDM3)
+            {
+                if (TargetSpeed > DM3_MAX_SPEED)
+                    TargetSpeed = DM3_MAX_SPEED;
+                if (HandleDM3GearShift(dt))
+                    return targetAcceleration; // PID skipped during shift
+            }
 
             // ── Temperature: back off throttle when overheating ──────────────
             var tempState = remoteControl.GetEngineTemperatureState(false);
