@@ -73,6 +73,10 @@
       <HintPath>$(DVInstallPath)DerailValley_Data\Managed\DV.RailTrack.dll</HintPath>
       <Private>False</Private>
     </Reference>
+    <Reference Include="DV.SignPlacer">
+      <HintPath>$(DVInstallPath)DerailValley_Data\Managed\DV.SignPlacer.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
     <Reference Include="DV.BrakeSystem">
       <HintPath>$(DVInstallPath)DerailValley_Data\Managed\DV.BrakeSystem.dll</HintPath>
       <Private>False</Private>
@@ -147,6 +151,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="ActiveRoute.cs" />
+    <Compile Include="ControlsOverriderRemote.cs" />
     <Compile Include="AudioUtils.cs" />
     <Compile Include="CommsRadio\RouteManagerStates.cs" />
     <Compile Include="LocoCruiseControl.cs" />

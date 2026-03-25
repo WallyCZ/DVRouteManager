@@ -396,44 +396,157 @@ namespace DVRouteManager.CommsRadio
     }
 
     // ─────────────────────────────────────────────────────────────
-    //  Route info state
+    //  Route info state  (cycles: Info/CLEAR → Flip/FLIP → Back)
     // ─────────────────────────────────────────────────────────────
     public class RouteManagerRouteInfoState : AStateBehaviour
     {
-        public RouteManagerRouteInfoState()
-            : base(BuildState())
-        { }
+        private readonly int _item; // 0 = info/clear, 1 = flip, 2 = back
 
-        private static CommsRadioState BuildState()
+        public RouteManagerRouteInfoState(int item = 0)
+            : base(BuildState(item))
+        {
+            _item = Mathf.Clamp(item, 0, 2);
+        }
+
+        private static CommsRadioState BuildState(int item)
         {
             if (!Module.ActiveRoute.IsSet)
                 return new CommsRadioState("ROUTE INFO", "No active route", "BACK");
 
-            var route = Module.ActiveRoute.Route;
-            var tracker = Module.ActiveRoute.RouteTracker;
-            string info = $"Length: {(route.Length / 1000.0):0.#}km\n"
-                + $"Heading: {route.StartHeading}\n"
-                + $"Reverses: {route.Reverses.Count}";
-
-            if (tracker != null)
-                info += $"\nProgress: {(tracker.DistanceTraveled / 1000.0):0.#}km";
-
-            return new CommsRadioState("ROUTE INFO", info, "CLEAR",
-                LCDArrowState.Off, LEDState.On, ButtonBehaviourType.Override);
+            string content, action;
+            switch (item)
+            {
+                case 1:
+                    content = "Flip direction";
+                    action = "FLIP";
+                    break;
+                case 2:
+                    content = "< Back";
+                    action = "BACK";
+                    break;
+                default:
+                    var route = Module.ActiveRoute.Route;
+                    var tracker = Module.ActiveRoute.RouteTracker;
+                    if (tracker != null && tracker.IsWaitingForTurntable)
+                    {
+                        content = "WAIT: turntable rotating";
+                        action = "CLEAR";
+                    }
+                    else
+                    {
+                        content = $"Length: {(route.Length / 1000.0):0.#}km\n"
+                            + $"Heading: {route.StartHeading}\n"
+                            + $"Reverses: {route.Reverses.Count}";
+                        if (tracker != null)
+                            content += $"\nProgress: {(tracker.DistanceTraveled / 1000.0):0.#}km";
+                        action = "CLEAR";
+                    }
+                    break;
+            }
+            return new CommsRadioState("ROUTE INFO", content, action,
+                LCDArrowState.Right, LEDState.On, ButtonBehaviourType.Override);
         }
 
         public override AStateBehaviour OnAction(CommsRadioUtility utility, InputAction action)
         {
             switch (action)
             {
-                case InputAction.Activate:
-                    Module.ActiveRoute.ClearRoute();
-                    return new RouteManagerMessageState("Route cleared", new RouteManagerMainMenuState());
+                case InputAction.Up:
+                    return new RouteManagerRouteInfoState((_item + 1) % 3);
                 case InputAction.Down:
+                    return new RouteManagerRouteInfoState((_item - 1 + 3) % 3);
+                case InputAction.Activate:
+                    switch (_item)
+                    {
+                        case 0:
+                            Module.ActiveRoute.ClearRoute();
+                            return new RouteManagerMessageState("Route cleared", new RouteManagerMainMenuState());
+                        case 1:
+                            return new RouteManagerFlipRouteState();
+                        case 2:
+                            return new RouteManagerMainMenuState();
+                    }
                     return new RouteManagerMainMenuState();
                 default:
                     return this;
             }
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    //  Flip route state  — recomputes route in opposite heading
+    // ─────────────────────────────────────────────────────────────
+    public class RouteManagerFlipRouteState : AStateBehaviour
+    {
+        private enum FlipStatus { Pending, Done, Error }
+        private FlipStatus _status = FlipStatus.Pending;
+        private string _message = "";
+
+        public RouteManagerFlipRouteState()
+            : base(new CommsRadioState("ROUTE MANAGER", "Flipping route...", "WAIT"))
+        {
+            Module.StartCoroutine(Flip());
+        }
+
+        private IEnumerator Flip()
+        {
+            yield return null;
+
+            if (!Module.ActiveRoute.IsSet)
+            {
+                _message = "No active route";
+                _status = FlipStatus.Error;
+                yield break;
+            }
+
+            System.Threading.Tasks.Task<Route> task = null;
+            try { task = Module.ActiveRoute.Route.FindOppositeRoute(); }
+            catch (Exception e)
+            {
+                _message = e.Message;
+                _status = FlipStatus.Error;
+                yield break;
+            }
+
+            while (!task.IsCompleted) yield return null;
+
+            if (task.IsFaulted || task.Result == null)
+            {
+                _message = task.Exception?.InnerException?.Message ?? "No opposite route found";
+                _status = FlipStatus.Error;
+                yield break;
+            }
+
+            Route newRoute = task.Result;
+            Trainset trainset = newRoute.Trainset ?? PlayerManager.LastLoco?.trainset;
+
+            Module.ActiveRoute.Route = newRoute;
+
+            if (trainset != null)
+            {
+                var chain = RouteTaskChain.FromDestination(newRoute.LastTrack.LogicTrack(), trainset);
+                var tracker = new RouteTracker(chain, true);
+                tracker.SetRoute(newRoute, trainset);
+                Module.ActiveRoute.RouteTracker = tracker;
+            }
+
+            newRoute.AdjustSwitches();
+
+            _message = $"Flipped {(newRoute.Length / 1000.0):0.#}km\nHeading: {newRoute.StartHeading}";
+            _status = FlipStatus.Done;
+        }
+
+        public override AStateBehaviour OnUpdate(CommsRadioUtility utility)
+        {
+            if (_status != FlipStatus.Pending)
+                return new RouteManagerMessageState(_message, new RouteManagerRouteInfoState());
+            return this;
+        }
+
+        public override AStateBehaviour OnAction(CommsRadioUtility utility, InputAction action)
+        {
+            if (action == InputAction.Down) return new RouteManagerMainMenuState();
+            return this;
         }
     }
 

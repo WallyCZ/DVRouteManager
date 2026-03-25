@@ -84,6 +84,39 @@ namespace DVRouteManager
         private RailTrack start;
         private RailTrack goal;
 
+        // ── Turntable cache ──────────────────────────────────────────────────
+        // Maps spur RailTrack → the TurntableRailTrack whose rim it touches.
+        // Also maps the turntable's own track → its TurntableRailTrack.
+        // Built once on first pathfinding call (main thread), read on background.
+        private static Dictionary<RailTrack, TurntableRailTrack> _spurToTurntable;
+        public  static Dictionary<RailTrack, TurntableRailTrack> _turntableTrackToTRT;
+        private static bool _turntableCacheBuilt = false;
+
+        public static void BuildTurntableCache()
+        {
+            _spurToTurntable    = new Dictionary<RailTrack, TurntableRailTrack>();
+            _turntableTrackToTRT = new Dictionary<RailTrack, TurntableRailTrack>();
+
+            foreach (var trt in UnityEngine.Object.FindObjectsOfType<TurntableRailTrack>())
+            {
+                if (trt == null || trt.trackEnds == null) continue;
+
+                var ttTrack = trt.Track;
+                if (ttTrack != null && !_turntableTrackToTRT.ContainsKey(ttTrack))
+                    _turntableTrackToTRT[ttTrack] = trt;
+
+                foreach (var te in trt.trackEnds)
+                {
+                    if (te?.track != null && !_spurToTurntable.ContainsKey(te.track))
+                        _spurToTurntable[te.track] = trt;
+                }
+            }
+
+            _turntableCacheBuilt = true;
+            Terminal.Log($"TurntableCache: {_turntableTrackToTRT.Count} turntables, {_spurToTurntable.Count} spurs");
+        }
+        // ─────────────────────────────────────────────────────────────────────
+
         // Heuristic that computes approximate distance between two rails
         protected double Heuristic(RailTrack a, RailTrack b)
         {
@@ -130,6 +163,11 @@ namespace DVRouteManager
         /// <param name="consistLength"></param>
         protected async System.Threading.Tasks.Task Astar(bool allowReverse, HashSet<string> carsToIgnore, double consistLength, List<TrackTransition> bannedTransitions)
         {
+            // Snapshot the yard organizer reference on the main thread before going background.
+            // IsTrackManagedByOrganizer / GetReservedSpace read a Dictionary that only changes
+            // during job generation (main thread, infrequent) — safe to read from background.
+            YardTracksOrganizer yardOrganizer = UnityEngine.Object.FindObjectOfType<YardTracksOrganizer>();
+
             await Await.BackgroundSyncContext();
 
             cameFrom = new Dictionary<RailTrack, RailTrack>();
@@ -155,15 +193,42 @@ namespace DVRouteManager
                 string debug = $"ID: {current.LogicTrack().ID.FullID} Prev: {prev?.LogicTrack().ID.FullID}";
 
                 List<RailTrack> neighbors = new List<RailTrack>();
+                // Tracks reachable via turntable rotation — always treated as direct (no reverse needed)
+                HashSet<RailTrack> turntableDirect = new HashSet<RailTrack>();
 
-                if (current.outIsConnected)
+                TurntableRailTrack currentAsTurntable;
+                if (_turntableTrackToTRT != null && _turntableTrackToTRT.TryGetValue(current, out currentAsTurntable))
                 {
-                    neighbors.AddRange(current.GetAllOutBranches().Where(b => b != null).Select(b => b.track).Where(t => t != null));
+                    // Current track IS a turntable — add every spur on its rim as a neighbor
+                    foreach (var te in currentAsTurntable.trackEnds)
+                    {
+                        if (te?.track == null) continue;
+                        neighbors.Add(te.track);
+                        turntableDirect.Add(te.track);
+                    }
                 }
-
-                if (current.inIsConnected)
+                else
                 {
-                    neighbors.AddRange(current.GetAllInBranches().Where(b => b != null).Select(b => b.track).Where(t => t != null));
+                    if (current.outIsConnected)
+                    {
+                        neighbors.AddRange(current.GetAllOutBranches().Where(b => b != null).Select(b => b.track).Where(t => t != null));
+                    }
+
+                    if (current.inIsConnected)
+                    {
+                        neighbors.AddRange(current.GetAllInBranches().Where(b => b != null).Select(b => b.track).Where(t => t != null));
+                    }
+
+                    // Also add any turntable this spur touches, even if not currently aligned
+                    TurntableRailTrack adjacentTRT;
+                    if (_spurToTurntable != null && _spurToTurntable.TryGetValue(current, out adjacentTRT) && adjacentTRT?.Track != null)
+                    {
+                        if (!neighbors.Contains(adjacentTRT.Track))
+                        {
+                            neighbors.Add(adjacentTRT.Track);
+                            turntableDirect.Add(adjacentTRT.Track);
+                        }
+                    }
                 }
                 string branches = DumpNodes(neighbors, current);
                 debug += "\n" + $"all branches: {branches}";
@@ -193,7 +258,8 @@ namespace DVRouteManager
                     }
 
                     //if we could go through junction directly (without reversing)
-                    bool isDirect = current.CanGoToDirectly(prev, neighbor);
+                    // Turntable crossings are always direct — the table rotates to align
+                    bool isDirect = turntableDirect.Contains(neighbor) || current.CanGoToDirectly(prev, neighbor);
 
                     if ( ! allowReverse && ! isDirect)
                     {
@@ -204,15 +270,18 @@ namespace DVRouteManager
                     // compute exact cost
                     double newCost = costSoFar[current] + neighborLogic.length / neighbor.GetAverageSpeed();
 
-                    // Penalise routing through named yard sidings (storage/loading/in/out/parking)
-                    // when they are not the destination. These tracks have cars spawned on them by
-                    // the job system so passing through them causes unnecessary conflicts.
-                    // Main-line tracks (type "M") and unnamed connector tracks are fine to use.
-                    if (neighbor != start && neighbor != goal)
+                    // Penalise routing through classified yard sidings (storage/in/out/loading).
+                    // Uses YardTracksOrganizer which tracks job reservations — this means tracks
+                    // reserved for unspawned cars are also penalised, not just physically occupied ones.
+                    if (neighbor != start && neighbor != goal && yardOrganizer != null
+                        && yardOrganizer.IsTrackManagedByOrganizer(neighborLogic))
                     {
-                        var nid = neighborLogic.ID;
-                        if (!string.IsNullOrEmpty(nid.yardId) && !nid.FullID.EndsWith("-M"))
-                            newCost += 50000.0;
+                        double reserved = yardOrganizer.GetReservedSpace(neighborLogic);
+                        // reserved > 40.5: track has active job reservations (the 40 m buffer is always present)
+                        if (reserved > 40.5 || !neighborLogic.IsFree())
+                            newCost += 5000.0; // occupied or reserved — likely has cars (spawned or not)
+                        else
+                            newCost += 300.0;  // empty classified siding — mild discourage
                     }
 
                     if ( ! isDirect)
@@ -303,6 +372,10 @@ namespace DVRouteManager
 
             if (start == null || goal == null)
                 return null;
+
+            // Build turntable cache on main thread before going async
+            if (!_turntableCacheBuilt)
+                BuildTurntableCache();
 
             HashSet<string> carsToIgnore = new HashSet<string>();
 

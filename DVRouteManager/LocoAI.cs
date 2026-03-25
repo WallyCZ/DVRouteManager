@@ -22,6 +22,87 @@ namespace DVRouteManager
         private bool _freightHaulActive = false;
         public bool IsFreightHaulActive => _freightHaulActive;
 
+        // Per-instance cache: computed on first use via BezierArcApproximation (same
+        // algorithm the game uses to place speed-limit signs).
+        private readonly Dictionary<RailTrack, float> _speedLimitCache = new Dictionary<RailTrack, float>();
+
+        /// <summary>
+        /// Returns true when the next 1–2 tracks ahead in the route path include
+        /// a turntable that hasn't finished rotating to its target angle yet.
+        /// The AI will hold TargetSpeed = 0 until this returns false.
+        /// </summary>
+        private bool IsApproachingRotatingTurntable()
+        {
+            if (PathFinder._turntableTrackToTRT == null || PathFinder._turntableTrackToTRT.Count == 0)
+                return false;
+
+            RailTrack currentTrack = trainCar?.Bogies[0]?.track;
+            if (currentTrack == null || RouteTracker?.Route?.Path == null)
+                return false;
+
+            var path = RouteTracker.Route.Path;
+            int idx = path.IndexOf(currentTrack);
+            if (idx < 0) return false;
+
+            // Look 1–2 steps ahead in the path
+            for (int i = idx + 1; i < Mathf.Min(idx + 3, path.Count); i++)
+            {
+                TurntableRailTrack trt;
+                if (!PathFinder._turntableTrackToTRT.TryGetValue(path[i], out trt) || trt == null)
+                    continue;
+                if (Mathf.Abs(Mathf.DeltaAngle(trt.currentYRotation, trt.targetYRotation)) > 1f)
+                    return true;
+            }
+
+            return false;
+        }
+
+        private float GetTrackSpeedLimit(RailTrack track)
+        {
+            if (track == null) return TARGET_SPEED_DEFAULT;
+            float cached;
+            if (_speedLimitCache.TryGetValue(track, out cached)) return cached;
+            float limit = ComputeTrackSpeedLimit(track);
+            _speedLimitCache[track] = limit;
+            return limit;
+        }
+
+        /// <summary>
+        /// Computes the speed limit for a track using the exact same method the game uses
+        /// to place speed-limit signs: BezierArcApproximation finds the minimum curve radius,
+        /// then the same radius→speed table from SignPlacer.CurveSegmentInfo.GetMaxSpeedForRadius()
+        /// maps that to km/h. Works on any track regardless of whether signs are loaded.
+        /// </summary>
+        private static float ComputeTrackSpeedLimit(RailTrack track)
+        {
+            if (track?.curve == null) return 120f;
+
+            var arcs = new System.Collections.Generic.List<BezierArcApproximation.Arc>();
+            BezierArcApproximation.CalculateArcs(track.curve, 0.5f, arcs);
+
+            if (arcs.Count == 0) return 120f;
+
+            float minRadius = float.PositiveInfinity;
+            foreach (var arc in arcs)
+                if (arc.r < minRadius) minRadius = arc.r;
+
+            // Radius → speed table from SignPlacer (identical to in-game signs)
+            if (minRadius < 50f)   return 10f;
+            if (minRadius < 70f)   return 20f;
+            if (minRadius < 95f)   return 30f;
+            if (minRadius < 130f)  return 40f;
+            if (minRadius < 170f)  return 50f;
+            if (minRadius < 230f)  return 60f;
+            if (minRadius < 360f)  return 70f;
+            if (minRadius < 700f)  return 80f;
+            if (minRadius < 900f)  return 90f;
+            if (minRadius < 1200f) return 100f;
+            return 120f;
+        }
+
+        /// <summary>Called at module startup — no longer needed but kept for compatibility.</summary>
+        public static void BuildSignSpeedLimitCache() { }
+
         public LocoAI(ILocomotiveRemoteControl remoteControl, TrainCar car) :
             base(remoteControl, car)
         {
@@ -170,14 +251,18 @@ namespace DVRouteManager
                     {
                         TargetSpeed = COUPLER_APPROACH_SPEED;
                     }
+                    else if (IsApproachingRotatingTurntable())
+                    {
+                        TargetSpeed = 0f; // hold until turntable finishes rotating
+                    }
                     else
                     {
-                        TargetSpeed = TARGET_SPEED_DEFAULT;
+                        TargetSpeed = GetTrackSpeedLimit(trainCar.Bogies[0].track);
                     }
                 }
                 else if (RouteTracker.TrackState == RouteTracker.TrackingState.OnStart)
                 {
-                    TargetSpeed = TARGET_SPEED_DEFAULT;
+                    TargetSpeed = GetTrackSpeedLimit(trainCar.Bogies[0].track);
                 }
                 else if (RouteTracker.TrackState == RouteTracker.TrackingState.StopTrainAfterSwitch)
                 {
@@ -204,7 +289,7 @@ namespace DVRouteManager
                     {
                         yield return Module.StartCoroutine(Reverse());
                         shouldreverse = false;
-                        TargetSpeed = TARGET_SPEED_DEFAULT;
+                        TargetSpeed = GetTrackSpeedLimit(trainCar.Bogies[0].track);
                     }
                 }
 
