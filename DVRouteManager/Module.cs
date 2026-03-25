@@ -69,6 +69,13 @@ namespace DVRouteManager
                 // Engine-on check removed; control fails naturally if engine is off
 
                 ILocomotiveRemoteControl remote = car.GetComponent<ILocomotiveRemoteControl>();
+                if (remote == null)
+                {
+                    // Loco has no RemoteControllerModule (e.g. DM3) — use BaseControlsOverrider directly
+                    mod.Logger.Log($"No ILocomotiveRemoteControl on {car.carLivery?.id ?? car.logicCar.ID} — using ControlsOverriderRemote");
+                    remote = new ControlsOverriderRemote(car, simController);
+                }
+
                 locoAI = new LocoAI(remote, car);
                 locosAI.Add(car.logicCar.ID, locoAI);
             }
@@ -201,6 +208,9 @@ namespace DVRouteManager
             ci.name = "route";
             Terminal.Autocomplete.Register(ci);
             Terminal.Log("Route command registered");
+
+            PathFinder.BuildTurntableCache();
+            LocoAI.BuildSignSpeedLimitCache();
         }
 
         public static IEnumerator SetupAudio()

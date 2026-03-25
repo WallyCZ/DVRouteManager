@@ -225,6 +225,24 @@ namespace DVRouteManager
                     junctionsForReversing.Add(reversingJunction);
                 }
 
+                // Rotate turntable to align with the path entry/exit spurs
+                if (walkData.prevTrack != null && walkData.nextTrack != null)
+                {
+                    TurntableRailTrack trt;
+                    if (PathFinder._turntableTrackToTRT != null &&
+                        PathFinder._turntableTrackToTRT.TryGetValue(walkData.currentTrack, out trt) && trt != null)
+                    {
+                        var entryEnd = trt.trackEnds?.FirstOrDefault(te => te?.track == walkData.prevTrack);
+                        if (entryEnd != null)
+                        {
+                            trt.targetYRotation = entryEnd.angle;
+                            trt.RotateToTargetRotation(true);
+                            count++;
+                            Terminal.Log($"Turntable rotated to {entryEnd.angle:0.#}° ({walkData.prevTrack.LogicTrack().ID.FullID} → {walkData.nextTrack.LogicTrack().ID.FullID})");
+                        }
+                    }
+                }
+
                 return true;
             });
 
@@ -323,6 +341,9 @@ namespace DVRouteManager
 
         public async static Task<Route> FindRoute(Track begin, Track end, ReversingStrategy reversingStrategy, Trainset trainset, List<TrackTransition> trackTransitions = null)
         {
+            if (begin.ID.FullID == end.ID.FullID)
+                throw new CommandException("You're already there");
+
             PathFinder pathFinder = new PathFinder(begin, end);
             Route route = await FindRoute(begin, end, trainset, false, trackTransitions);
 
@@ -364,7 +385,7 @@ namespace DVRouteManager
 
             var path = await pathFinder.FindPath(allowReverses, consistLength, trackTransitions);
 
-            if (path == null)
+            if (path == null || path.Count == 0)
                 return null;
 
             return new Route(path, end, trainset);

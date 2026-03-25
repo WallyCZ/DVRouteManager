@@ -39,6 +39,10 @@ namespace DVRouteManager
 
         public float RecommendedSpeed { get; protected set; }
 
+        /// <summary>True while a turntable ahead in the route is still rotating to its target angle.</summary>
+        public bool IsWaitingForTurntable { get; private set; }
+        private bool _turntableWarnPlayed = false;
+
         public float ElapsedTime { get; protected set; }
 
         public RouteTracker(RouteTaskChain chain, bool audio)
@@ -280,6 +284,7 @@ namespace DVRouteManager
 #endif
 
                         UpdateCurrentTrack(firstCarPosition, lastCarPosition);
+                        CheckUpcomingTurntable(firstCarPosition);
                     }
                 }
                 catch (Exception exc)
@@ -332,7 +337,7 @@ namespace DVRouteManager
 
             bool isOnTrack = pathData != null && (pathData.nextTrack == null || pathData.nextTrack == car.trackNext);
 
-#if DEBUG
+#if DEBUG2
             if(!isOnTrack)
             {
                 Terminal.Log($"firstPathData: {firstPathData?.prevTrack?.LogicTrack().ID.FullID}->{firstPathData?.currentTrack.LogicTrack().ID.FullID}->{firstPathData?.nextTrack?.LogicTrack().ID.FullID}");
@@ -353,25 +358,19 @@ namespace DVRouteManager
 
             }
 
-#if DEBUG
+#if DEBUG2
             float carSpeed = Mathf.Abs(car.dvCar.GetForwardSpeed());
             float metersAhead = carSpeed * carSpeed + 50.0f;
             var (aheadTrack, aheadSpan, direction) = car.track.GetAheadTrack(car.span, car.TrackDirection, metersAhead);
             float span = Mathf.Clamp01((float)(aheadSpan / aheadTrack.LogicTrack().length));
-            Vector3 tan = aheadTrack.curve.GetTangentAt(span );
+            Vector3 tan = aheadTrack.curve.GetTangentAt(span);
             if (direction)
                 tan = -tan;
             Vector2 tand = new Vector2(tan.x, tan.z);
             float angle = Mathf.Atan2(tand.y, tand.x);
-
-
-
-
-            //Terminal.Log($"isOnTrack: {isOnTrack} firstCar: {car == firstCar} trackDistance: {pathData?.distanceFromStart} posFromstart: {DistanceTraveled} posToFinish: {DistanceToFinish} carTrack: {car?.track?.LogicTrack().ID.FullID} carNext: {car?.trackNext?.LogicTrack().ID.FullID} carMoving: {car?.moving} carVelocity: {car?.dvCar.GetVelocity().sqrMagnitude} carChangedTrack: {car?.changedTrack}  tan: {tan}");
             float angleDiff = Utils.GetAngleDifference(lastAngle, angle);
-            RecommendedSpeed = RailTrackExtension.AngleDiffToSpeed(angleDiff, (float) (posFromStart - lastPos));
+            RecommendedSpeed = RailTrackExtension.AngleDiffToSpeed(angleDiff, (float)(posFromStart - lastPos));
             angleDiff = angleDiff * 180f / Mathf.PI / Mathf.Abs((float)(posFromStart - lastPos));
-
             Terminal.Log($"isOnTrack: {isOnTrack} car: {car.dvCar.ID} posFromstart: {DistanceTraveled} posToFinish: {DistanceToFinish} carTrack: {car?.track?.LogicTrack().ID.FullID} carNext: {car?.trackNext?.LogicTrack().ID.FullID} angle: {Mathf.Atan2(tand.y, tand.x)} ahead {aheadTrack.LogicTrack().ID.FullID} aheadSpan {aheadSpan} aheadDir {direction} carSpan {car.span} carDir {car.TrackDirection} angleDiff {angleDiff} {RecommendedSpeed}");
             lastAngle = angle;
             lastPos = posFromStart;
@@ -557,6 +556,57 @@ namespace DVRouteManager
             {
                 Dispose();
             }
+        }
+
+        private void CheckUpcomingTurntable(CarTrackPosition car)
+        {
+            if (PathFinder._turntableTrackToTRT == null || PathFinder._turntableTrackToTRT.Count == 0)
+            {
+                IsWaitingForTurntable = false;
+                return;
+            }
+
+            if (car?.track == null || Route?.Path == null)
+            {
+                IsWaitingForTurntable = false;
+                return;
+            }
+
+            int idx = Route.Path.IndexOf(car.track);
+            bool rotatingAhead = false;
+
+            if (idx >= 0)
+            {
+                for (int i = idx + 1; i < Mathf.Min(idx + 3, Route.Path.Count); i++)
+                {
+                    TurntableRailTrack trt;
+                    if (!PathFinder._turntableTrackToTRT.TryGetValue(Route.Path[i], out trt) || trt == null)
+                        continue;
+                    if (Mathf.Abs(Mathf.DeltaAngle(trt.currentYRotation, trt.targetYRotation)) > 1f)
+                    {
+                        rotatingAhead = true;
+                        break;
+                    }
+                }
+            }
+
+            if (rotatingAhead && !IsWaitingForTurntable)
+            {
+                // Just started waiting — play stop cue once
+                if (audio && !_turntableWarnPlayed)
+                {
+                    Module.PlayClip(Module.stopTrainClip);
+                    _turntableWarnPlayed = true;
+                }
+            }
+            else if (!rotatingAhead && IsWaitingForTurntable)
+            {
+                // Turntable finished — play "on" cue to tell player they can proceed
+                if (audio) Module.PlayClip(Module.onClip);
+                _turntableWarnPlayed = false;
+            }
+
+            IsWaitingForTurntable = rotatingAhead;
         }
 
         public void NotifyTrainEnd()

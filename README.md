@@ -62,19 +62,45 @@ Open the Comms Radio in-cab and cycle to **Route Manager**. From there you can:
 |------|--------|
 | Build | ✅ Compiles |
 | Comms Radio UI | ✅ Working |
-| Route pathfinding | 🧪 Testing |
+| Route pathfinding | ✅ Working |
 | Junction switching | ✅ Working |
+| Route tracking | ✅ Working |
+| Turntable routing | 🧪 Testing |
+| Sign-based speed limits | 🧪 Testing |
 | Cruise control | 🧪 Testing |
 | Locomotive AI | 🧪 Testing |
 | Freight haul AI | 🧪 Testing |
 | Map markers | ✅ Working |
-| Audio cues | 🧪 Testing — fixed `spatialBlend` (was 3D, now 2D) |
+| Audio cues | ❌ Not working — clips load but do not play in-game |
 
 ---
 
 ## Changelog
 
-### 0.4.0 (current — in development)
+### 0.5.0 (current — in development)
+
+**Turntable support**
+- Pathfinder now routes through turntables — the A* graph includes turntable tracks as nodes connecting all spur tracks on their rim; tracks reachable via turntable rotation are treated as direct (no reverse penalty)
+- `Route.AdjustSwitches()` automatically rotates a turntable to the correct entry angle when the route passes through it
+- Locomotive AI waits (`TargetSpeed = 0`) while an upcoming turntable is still rotating
+- Player-controlled routing: `RouteTracker` detects an upcoming rotating turntable 1–2 tracks ahead, plays a stop-train audio cue, and shows "WAIT: turntable rotating" on the Comms Radio display; plays a go cue when rotation finishes
+
+**Speed limits from in-game signs**
+- Replaced geometry-based speed estimation with direct sign reading
+- At startup, all `SignGeneratorData` MonoBehaviours are scanned; each speed-limit sign is mapped to the nearest `RailTrack` within 30 m
+- AI now drives at exactly the speed the in-game signs display — 40 where it says 40, 120 on open main line
+- Falls back to 120 km/h (no restriction) on tracks with no nearby sign
+
+**Comms Radio: Active Route improvements**
+- Added **Flip direction** button — regenerates the route in the opposite heading (even if longer); uses `FindOppositeRoute()` which bans the current first→second track transition to force the pathfinder the other way
+- Shows "WAIT: turntable rotating" in route info when the tracker detects an upcoming rotating turntable
+
+**Other**
+- Routing to your current location now gives a clear "You're already there" error instead of crashing
+
+---
+
+### 0.4.0
 
 Full overhaul to support the latest Derail Valley release, plus new AI features.
 

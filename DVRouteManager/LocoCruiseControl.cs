@@ -112,7 +112,7 @@ namespace DVRouteManager
 
             previousError = error;
 
-#if DEBUG
+#if DEBUG2
             Terminal.Log($"targetSpeed {TargetSpeed} error {error} accel {acceleration} controlValue {controlValue} throttle {remoteControl.GetTargetThrottle()} temp {tempState}");
 #endif
 
