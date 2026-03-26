@@ -1,10 +1,12 @@
 using CommandTerminal;
 using DV.HUD;
 using DV.Simulation.Cars;
+using DV.Simulation.Controllers;
 using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Threading.Tasks;
@@ -42,6 +44,29 @@ namespace DVRouteManager
         private InteriorControlsManager    _interiorControls;
         private bool                       _isDM3;
 
+        // ── Steam (S060 / S282) state ────────────────────────────────────────
+        private bool                       _isSteam;
+        private BaseControlsOverrider      _steamOverrider;
+
+        // Smoothed control positions
+        private float _steamRegulator      = 0f;
+        private float _steamCutoff         = 0.5f;
+        private float _steamBrakeTarget    = 0f;
+
+        // Pulse-braking state
+        private bool  _steamPulseBraking   = false;
+        private float _steamPulseTimer     = 0f;
+        private bool  _steamPulseHigh      = false;
+
+        // Averaged steam-chest pressure (sampled every 0.1 s, window = 10)
+        private readonly Queue<float> _steamPressureSamples = new Queue<float>();
+        private float _steamPressureTimer = 0f;
+
+        // Reflection cache for simFlow.TryGetPort
+        private SimController _steamSimCtrl;
+        private MethodInfo    _tryGetPortMI;
+        private PropertyInfo  _portValueProp;
+
         // ────────────────────────────────────────────────────────────────────
 
         public LocoCruiseControl(ILocomotiveRemoteControl remoteControl, TrainCar car = null)
@@ -54,6 +79,11 @@ namespace DVRouteManager
                 _isDM3        = car.carLivery?.parentType?.id == LOCO_DM3;
                 _indicators   = car.GetComponentInChildren<LocoIndicatorReader>();
                 // Interior controls loaded lazily (may be null until player enters cab)
+
+                string locoId = car.carLivery?.parentType?.id ?? "";
+                _isSteam = locoId.Contains("S060") || locoId.Contains("S282");
+                if (_isSteam)
+                    _steamOverrider = car.SimController?.controlsOverrider;
             }
         }
 
@@ -77,6 +107,10 @@ namespace DVRouteManager
         //https://en.wikipedia.org/wiki/PID_controller
         protected float MaintainSpeed(float targetAcceleration, float dt, float speed, float acceleration)
         {
+            // Steam locos use direct regulator/cutoff/brake control, not the PID
+            if (_isSteam)
+                return MaintainSpeedSteam(dt, speed);
+
             if (remoteControl.GetReverserSymbol() == "N")
             {
                 running = false;
@@ -218,6 +252,199 @@ namespace DVRouteManager
             if (trainCar?.interior == null) return null;
             _interiorControls = trainCar.interior.GetComponentInChildren<InteriorControlsManager>(true);
             return _interiorControls;
+        }
+
+        // ── Steam loco controller ────────────────────────────────────────────
+        // Mirrors the algorithm from SteamCruiseControl mod's CruiseControlAI:
+        //   - Direct absolute Set() on regulator, cutoff, brake (no PID)
+        //   - Pressure-aware cutoff: reduce steam admission as chest pressure rises
+        //   - Pulse braking: on 2.5 s / off 1.5 s cycle when overspeeding
+        private float MaintainSpeedSteam(float dt, float speed)
+        {
+            if (_steamOverrider == null) return 0f;
+
+            bool forward  = TargetSpeed >= 0f;
+            float absTarget = Mathf.Abs(TargetSpeed);
+            float absSpeed  = Mathf.Abs(speed);
+
+            float pressure    = GetSteamChestPressure();
+            float avgPressure = UpdateSteamPressureAvg(pressure, dt);
+
+            // ── Full stop ────────────────────────────────────────────────────
+            if (absTarget < Mathf.Epsilon)
+            {
+                _steamPulseBraking = false;
+                SteamSetBrake(1f);
+                SteamSetRegulatorSmooth(0f);
+                SteamSetCutoffSmooth(0.5f, dt);
+                return 0f;
+            }
+
+            float speedDiff = absSpeed - absTarget; // positive → too fast
+
+            if (speedDiff > 0.1f)
+            {
+                // ── Pulse braking ─────────────────────────────────────────────
+                if (!_steamPulseBraking)
+                {
+                    _steamPulseBraking = true;
+                    _steamPulseHigh    = true;
+                    _steamPulseTimer   = 0f;
+                }
+
+                _steamPulseTimer += dt;
+                float overshootFactor = Mathf.Clamp01(speedDiff / 5f);
+
+                const float PULSE_HIGH_DURATION = 2.5f;
+                const float PULSE_LOW_DURATION  = 1.5f;
+
+                if (_steamPulseHigh)
+                {
+                    if (_steamPulseTimer >= PULSE_HIGH_DURATION)
+                    { _steamPulseHigh = false; _steamPulseTimer = 0f; }
+                }
+                else
+                {
+                    if (_steamPulseTimer >= PULSE_LOW_DURATION)
+                    { _steamPulseHigh = true; _steamPulseTimer = 0f; }
+                }
+
+                float brakeVal = _steamPulseHigh ? Mathf.Lerp(0.7f, 1f, overshootFactor) : 0f;
+                SteamSetBrake(brakeVal);
+                SteamSetRegulatorSmooth(0f);
+                // Cutoff to neutral while braking — avoids steam fighting brakes
+                SteamSetCutoffSmooth(forward ? 0.5f : 0.49f, dt);
+            }
+            else
+            {
+                // ── Not braking ───────────────────────────────────────────────
+                _steamPulseBraking = false;
+                _steamPulseHigh    = false;
+                SteamSetBrake(0f);
+
+                if (absSpeed < absTarget - 0.1f)
+                {
+                    // ── Accelerating ──────────────────────────────────────────
+                    float targetRegulator, targetCutoff;
+
+                    if (absSpeed < 10f)
+                    {
+                        // Gentle start — ramp up regulator, full cutoff
+                        targetRegulator = 0.1f + 0.9f * (absSpeed / 10f);
+                        targetCutoff    = forward ? 1f : 0f;
+                    }
+                    else if (absSpeed < 20f)
+                    {
+                        // Full regulator, full cutoff until up to speed
+                        targetRegulator = 1f;
+                        targetCutoff    = forward ? 1f : 0f;
+                    }
+                    else if (avgPressure < 5f)
+                    {
+                        // Low chest pressure: wide-open cutoff to admit more steam
+                        targetRegulator = 1f;
+                        targetCutoff    = forward ? 0.35f : 0.15f;
+                    }
+                    else if (avgPressure < 8f)
+                    {
+                        targetRegulator = 1f;
+                        targetCutoff    = forward
+                            ? (0.4f + 0.1f * (avgPressure - 5f) / 3f)
+                            : 0.25f;
+                    }
+                    else if (avgPressure < 12f)
+                    {
+                        targetRegulator = 1f;
+                        float t = (avgPressure - 8f) / 4f;
+                        targetCutoff    = forward ? (0.55f + 0.25f * t) : 0.35f;
+                    }
+                    else
+                    {
+                        // Good pressure: efficient cutoff (~75%)
+                        targetRegulator = 1f;
+                        targetCutoff    = forward ? 0.75f : 0.25f;
+                    }
+
+                    SteamSetRegulatorSmooth(targetRegulator);
+                    SteamSetCutoffSmooth(targetCutoff, dt);
+                }
+                else
+                {
+                    // ── Coasting at target speed ──────────────────────────────
+                    // Keep tiny regulator so steam flows (engine sound + steam heat)
+                    SteamSetRegulatorSmooth(0.1f);
+                    SteamSetCutoffSmooth(0.5f, dt);
+                }
+            }
+
+            return 0f;
+        }
+
+        private void SteamSetRegulatorSmooth(float target)
+        {
+            _steamRegulator = Mathf.Lerp(_steamRegulator, target, 0.15f);
+            _steamOverrider?.Throttle?.Set(_steamRegulator);
+        }
+
+        // cutoff 0 = full reverse, 0.5 = neutral, 1 = full forward
+        private void SteamSetCutoffSmooth(float target, float dt)
+        {
+            float delta = target - _steamCutoff;
+            if (Mathf.Abs(delta) > 0.005f)
+                _steamCutoff += delta * 0.15f * dt;
+            else
+                _steamCutoff = target;
+
+            _steamOverrider?.Reverser?.Set(_steamCutoff);
+        }
+
+        private void SteamSetBrake(float value)
+        {
+            _steamBrakeTarget = value;
+            _steamOverrider?.Brake?.Set(value);
+        }
+
+        private float UpdateSteamPressureAvg(float currentPressure, float dt)
+        {
+            _steamPressureTimer += dt;
+            if (_steamPressureTimer >= 0.1f)
+            {
+                _steamPressureSamples.Enqueue(currentPressure);
+                _steamPressureTimer = 0f;
+                while (_steamPressureSamples.Count > 10)
+                    _steamPressureSamples.Dequeue();
+            }
+
+            if (_steamPressureSamples.Count == 0) return currentPressure;
+
+            float sum = 0f;
+            foreach (float s in _steamPressureSamples) sum += s;
+            return sum / _steamPressureSamples.Count;
+        }
+
+        private float GetSteamChestPressure()
+        {
+            try
+            {
+                if (_steamSimCtrl == null)
+                    _steamSimCtrl = trainCar?.GetComponentInChildren<SimController>();
+                if (_steamSimCtrl?.simFlow == null) return 8f;
+
+                if (_tryGetPortMI == null)
+                    _tryGetPortMI = _steamSimCtrl.simFlow.GetType()
+                        .GetMethod("TryGetPort", BindingFlags.Instance | BindingFlags.Public);
+                if (_tryGetPortMI == null) return 8f;
+
+                var args = new object[] { "steamEngine.STEAM_CHEST_PRESSURE", null, true };
+                if (!(bool)_tryGetPortMI.Invoke(_steamSimCtrl.simFlow, args) || args[1] == null)
+                    return 8f;
+
+                if (_portValueProp == null)
+                    _portValueProp = args[1].GetType().GetProperty("Value");
+
+                return _portValueProp != null ? (float)_portValueProp.GetValue(args[1]) - 1f : 8f;
+            }
+            catch { return 8f; }
         }
 
         // ────────────────────────────────────────────────────────────────────

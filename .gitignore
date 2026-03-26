@@ -2,3 +2,9 @@
 /.claude
 /PORTING_NOTES.md
 /SESSION_RESUME.md
+$staging/Resources/audio/wrongway.wav
+$staging/Resources/audio/trainend.wav
+$staging/Resources/audio/stoptrain.wav
+$staging/Resources/audio/set.wav
+$staging/Resources/audio/on.wav
+$staging/Resources/audio/off.wav
