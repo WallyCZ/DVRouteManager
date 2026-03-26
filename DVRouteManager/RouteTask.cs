@@ -1,5 +1,6 @@
 ﻿using CommandTerminal;
 using DV.Logic.Job;
+using DV.Utils;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -173,8 +174,9 @@ namespace DVRouteManager
 
             cars.ForEach(car =>
             {
+                if (car == null) return;
                 TrainCar trainCar;
-                if (!SingletonBehaviour<IdGenerator>.Instance.logicCarToTrainCar.TryGetValue(car, out trainCar))
+                if (!TrainCarRegistry.Instance.logicCarToTrainCar.TryGetValue(car, out trainCar))
                     return;
 
                 if (!TrainSets.Contains(trainCar.trainset))

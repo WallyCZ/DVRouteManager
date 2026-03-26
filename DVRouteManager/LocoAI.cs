@@ -1,8 +1,10 @@
 ﻿using CommandTerminal;
+using DV.Logic.Job;
 using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Threading.Tasks;
@@ -16,9 +18,152 @@ namespace DVRouteManager
         private const float COUPLER_APPROACH_SPEED = 5.0f;
         private RouteTracker RouteTracker;
 
-        public LocoAI(ILocomotiveRemoteControl remoteControl) :
-            base(remoteControl)
+        public bool IsRunning => running;
+        private bool _freightHaulActive = false;
+        public bool IsFreightHaulActive => _freightHaulActive;
+
+        // Per-instance cache: computed on first use via BezierArcApproximation (same
+        // algorithm the game uses to place speed-limit signs).
+        private readonly Dictionary<RailTrack, float> _speedLimitCache = new Dictionary<RailTrack, float>();
+
+        /// <summary>
+        /// Returns true when the next 1–2 tracks ahead in the route path include
+        /// a turntable that hasn't finished rotating to its target angle yet.
+        /// The AI will hold TargetSpeed = 0 until this returns false.
+        /// </summary>
+        private bool IsApproachingRotatingTurntable()
         {
+            if (PathFinder._turntableTrackToTRT == null || PathFinder._turntableTrackToTRT.Count == 0)
+                return false;
+
+            RailTrack currentTrack = trainCar?.Bogies[0]?.track;
+            if (currentTrack == null || RouteTracker?.Route?.Path == null)
+                return false;
+
+            var path = RouteTracker.Route.Path;
+            int idx = path.IndexOf(currentTrack);
+            if (idx < 0) return false;
+
+            // Look 1–2 steps ahead in the path
+            for (int i = idx + 1; i < Mathf.Min(idx + 3, path.Count); i++)
+            {
+                TurntableRailTrack trt;
+                if (!PathFinder._turntableTrackToTRT.TryGetValue(path[i], out trt) || trt == null)
+                    continue;
+                if (Mathf.Abs(Mathf.DeltaAngle(trt.currentYRotation, trt.targetYRotation)) > 1f)
+                    return true;
+            }
+
+            return false;
+        }
+
+        private float GetTrackSpeedLimit(RailTrack track)
+        {
+            if (track == null) return TARGET_SPEED_DEFAULT;
+            float cached;
+            if (_speedLimitCache.TryGetValue(track, out cached)) return cached;
+            float limit = ComputeTrackSpeedLimit(track);
+            _speedLimitCache[track] = limit;
+            return limit;
+        }
+
+        /// <summary>
+        /// Computes the speed limit for a track using the exact same method the game uses
+        /// to place speed-limit signs: BezierArcApproximation finds the minimum curve radius,
+        /// then the same radius→speed table from SignPlacer.CurveSegmentInfo.GetMaxSpeedForRadius()
+        /// maps that to km/h. Works on any track regardless of whether signs are loaded.
+        /// </summary>
+        private static float ComputeTrackSpeedLimit(RailTrack track)
+        {
+            if (track?.curve == null) return 120f;
+
+            var arcs = new System.Collections.Generic.List<BezierArcApproximation.Arc>();
+            BezierArcApproximation.CalculateArcs(track.curve, 0.5f, arcs);
+
+            if (arcs.Count == 0) return 120f;
+
+            float minRadius = float.PositiveInfinity;
+            foreach (var arc in arcs)
+                if (arc.r < minRadius) minRadius = arc.r;
+
+            // Radius → speed table from SignPlacer (identical to in-game signs)
+            if (minRadius < 50f)   return 10f;
+            if (minRadius < 70f)   return 20f;
+            if (minRadius < 95f)   return 30f;
+            if (minRadius < 130f)  return 40f;
+            if (minRadius < 170f)  return 50f;
+            if (minRadius < 230f)  return 60f;
+            if (minRadius < 360f)  return 70f;
+            if (minRadius < 700f)  return 80f;
+            if (minRadius < 900f)  return 90f;
+            if (minRadius < 1200f) return 100f;
+            return 120f;
+        }
+
+        /// <summary>Called at module startup — no longer needed but kept for compatibility.</summary>
+        public static void BuildSignSpeedLimitCache() { }
+
+        public LocoAI(ILocomotiveRemoteControl remoteControl, TrainCar car) :
+            base(remoteControl, car)
+        {
+        }
+
+        // Disables DriverAssist and SteamCruiseControl via reflection so they don't fight us.
+        // Both mods are optional — failures are silently swallowed.
+        private static void DisableCompetingMods()
+        {
+            var assemblies = AppDomain.CurrentDomain.GetAssemblies();
+
+            // DriverAssist: EntityManager.Instance.Loco.Components.CruiseControl = null
+            try
+            {
+                var asm = assemblies.FirstOrDefault(a => a.GetName().Name == "DriverAssist");
+                if (asm != null)
+                {
+                    Type entityManagerType = asm.GetType("EntityManager");
+                    FieldInfo instanceField = entityManagerType?.GetField("Instance");
+                    object entityManager = instanceField?.GetValue(null);
+                    FieldInfo locoField = entityManager?.GetType().GetField("Loco");
+                    object loco = locoField?.GetValue(entityManager);
+                    if (loco != null)
+                    {
+                        FieldInfo componentsField = loco.GetType().GetField("Components");
+                        object components = componentsField?.GetValue(loco);
+                        if (components != null)
+                        {
+                            PropertyInfo cruiseControlProp = components.GetType().GetProperty("CruiseControl");
+                            cruiseControlProp?.SetValue(components, null);
+                            Terminal.Log("DriverAssist cruise control disabled");
+                        }
+                    }
+                }
+            }
+            catch (Exception e)
+            {
+                Module.mod.Logger.Log("DisableCompetingMods DriverAssist: " + e.Message);
+            }
+
+            // SteamCruiseControl: Main._cruiseControlManager.IsEnabled = false
+            try
+            {
+                var asm = assemblies.FirstOrDefault(a => a.GetName().Name == "SteamCruiseControl");
+                if (asm != null)
+                {
+                    Type mainType = asm.GetType("SteamCruiseControl.Main");
+                    FieldInfo managerField = mainType?.GetField("_cruiseControlManager", BindingFlags.Static | BindingFlags.NonPublic);
+                    object manager = managerField?.GetValue(null);
+                    if (manager != null)
+                    {
+                        PropertyInfo isEnabledProp = manager.GetType().GetProperty("IsEnabled");
+                        isEnabledProp?.SetValue(manager, false);
+                        Terminal.Log("SteamCruiseControl disabled");
+                    }
+                }
+            }
+            catch (Exception e)
+            {
+                Module.mod.Logger.Log("DisableCompetingMods SteamCruiseControl: " + e.Message);
+            }
         }
 
         public bool StartAI(RouteTracker routeTracker)
@@ -33,6 +178,7 @@ namespace DVRouteManager
             if (RouteTracker.TrackState != RouteTracker.TrackingState.BeforeStart && RouteTracker.TrackState != RouteTracker.TrackingState.OnStart)
                 return false;
 
+            DisableCompetingMods();
             RouteTracker.Route.AdjustSwitches();
 
             TargetSpeed = TARGET_SPEED_DEFAULT;
@@ -101,18 +247,22 @@ namespace DVRouteManager
                 }
                 else if (RouteTracker.TrackState == RouteTracker.TrackingState.RightHeading)
                 {
-                    if (RouteTracker.DistanceToFinish < 50.0f && !RouteTracker.Route.LastTrack.logicTrack.IsFree(RouteTracker.Trainset)) //finds all couplers not only on right rail
+                    if (RouteTracker.DistanceToFinish < 50.0f && !RouteTracker.Route.LastTrack.LogicTrack().IsFree(RouteTracker.Trainset)) //finds all couplers not only on right rail
                     {
                         TargetSpeed = COUPLER_APPROACH_SPEED;
                     }
+                    else if (IsApproachingRotatingTurntable())
+                    {
+                        TargetSpeed = 0f; // hold until turntable finishes rotating
+                    }
                     else
                     {
-                        TargetSpeed = TARGET_SPEED_DEFAULT;
+                        TargetSpeed = GetTrackSpeedLimit(trainCar.Bogies[0].track);
                     }
                 }
                 else if (RouteTracker.TrackState == RouteTracker.TrackingState.OnStart)
                 {
-                    TargetSpeed = TARGET_SPEED_DEFAULT;
+                    TargetSpeed = GetTrackSpeedLimit(trainCar.Bogies[0].track);
                 }
                 else if (RouteTracker.TrackState == RouteTracker.TrackingState.StopTrainAfterSwitch)
                 {
@@ -139,7 +289,7 @@ namespace DVRouteManager
                     {
                         yield return Module.StartCoroutine(Reverse());
                         shouldreverse = false;
-                        TargetSpeed = TARGET_SPEED_DEFAULT;
+                        TargetSpeed = GetTrackSpeedLimit(trainCar.Bogies[0].track);
                     }
                 }
 
@@ -157,7 +307,7 @@ namespace DVRouteManager
 
                 if (RouteTracker.TrackState == RouteTracker.TrackingState.OnFinish)
                 {
-                    if (RouteTracker.Route.LastTrack.logicTrack.IsFree(RouteTracker.Trainset))
+                    if (RouteTracker.Route.LastTrack.LogicTrack().IsFree(RouteTracker.Trainset))
                     {
                         break;
                     }
@@ -223,7 +373,157 @@ namespace DVRouteManager
                 remoteControl.UpdateBrake(-1.0f);
                 yield return new WaitForSeconds(0.1f);
             }
+        }
 
+        // ─── Freight haul ────────────────────────────────────────────────────
+
+        /// <summary>Stops both the AI driving and any active freight haul.</summary>
+        public void StopAll()
+        {
+            _freightHaulActive = false;
+            Stop();
+        }
+
+        /// <summary>
+        /// Starts a full freight haul: loco → cars → couple → release HB → destination → uncouple → apply HB.
+        /// </summary>
+        public void StartFreightHaul(RouteTask task, TrainCar loco)
+        {
+            _freightHaulActive = false; // abort any existing haul
+            Stop();
+            Module.StartCoroutine(FreightHaulCoroutine(task, loco));
+        }
+
+        private IEnumerator FreightHaulCoroutine(RouteTask task, TrainCar loco)
+        {
+            _freightHaulActive = true;
+
+            // ── Phase 1: drive loco to freight cars ──────────────────────────
+            Terminal.Log("Freight haul: phase 1 – routing to cars");
+
+            Trainset freightTrainset = task.TrainSets.FirstOrDefault();
+            if (freightTrainset == null)
+            {
+                Terminal.Log("Freight haul: no trainset in task");
+                _freightHaulActive = false;
+                yield break;
+            }
+
+            Track carTrack = freightTrainset.firstCar.Bogies[0].track.LogicTrack();
+            Track locoTrack = loco.trainset.firstCar.Bogies[0].track.LogicTrack();
+
+            var toCarsTask = Route.FindRoute(locoTrack, carTrack, ReversingStrategy.ChooseBest, loco.trainset);
+            while (!toCarsTask.IsCompleted) yield return null;
+
+            if (!_freightHaulActive) yield break;
+
+            if (toCarsTask.IsFaulted || toCarsTask.Result == null)
+            {
+                Terminal.Log("Freight haul: cannot find route to cars – " + (toCarsTask.Exception?.InnerException?.Message ?? "null"));
+                _freightHaulActive = false;
+                yield break;
+            }
+
+            var chain1 = RouteTaskChain.FromDestination(carTrack, loco.trainset);
+            var tracker1 = new RouteTracker(chain1, true);
+            tracker1.SetRoute(toCarsTask.Result, loco.trainset);
+            Module.ActiveRoute.Route = toCarsTask.Result;
+            Module.ActiveRoute.RouteTracker = tracker1;
+
+            StartAI(tracker1);
+            while (running && _freightHaulActive) yield return null;
+
+            if (!_freightHaulActive) { Stop(); yield break; }
+
+            // ── Phase 2: couple and release handbrakes ───────────────────────
+            Terminal.Log("Freight haul: phase 2 – coupling");
+            yield return TryCoupleAndReleaseHandbrakes(loco);
+            yield return new WaitForSeconds(1.5f);
+
+            if (!_freightHaulActive) yield break;
+
+            // ── Phase 3: drive to destination ────────────────────────────────
+            Terminal.Log($"Freight haul: phase 3 – routing to {task.DestinationTrack.ID.FullID}");
+
+            Track nowTrack = loco.trainset.firstCar.Bogies[0].track.LogicTrack();
+            var toDestTask = Route.FindRoute(nowTrack, task.DestinationTrack, ReversingStrategy.ChooseBest, loco.trainset);
+            while (!toDestTask.IsCompleted) yield return null;
+
+            if (!_freightHaulActive) yield break;
+
+            if (toDestTask.IsFaulted || toDestTask.Result == null)
+            {
+                Terminal.Log("Freight haul: cannot find route to destination – " + (toDestTask.Exception?.InnerException?.Message ?? "null"));
+                _freightHaulActive = false;
+                yield break;
+            }
+
+            var chain2 = RouteTaskChain.FromDestination(task.DestinationTrack, loco.trainset);
+            var tracker2 = new RouteTracker(chain2, true);
+            tracker2.SetRoute(toDestTask.Result, loco.trainset);
+            Module.ActiveRoute.Route = toDestTask.Result;
+            Module.ActiveRoute.RouteTracker = tracker2;
+
+            StartAI(tracker2);
+            while (running && _freightHaulActive) yield return null;
+
+            if (!_freightHaulActive) { Stop(); yield break; }
+
+            // ── Phase 4: uncouple and apply handbrakes ───────────────────────
+            Terminal.Log("Freight haul: phase 4 – uncoupling");
+            yield return UncoupleAndApplyHandbrakes(loco);
+
+            _freightHaulActive = false;
+            Terminal.Log("Freight haul: complete!");
+            Module.PlayClip(Module.trainEnd);
+        }
+
+        private IEnumerator TryCoupleAndReleaseHandbrakes(TrainCar loco)
+        {
+            // Couple any couplers at the ends of the current trainset that are in range
+            Coupler frontEnd = CouplerLogic.GetLastCoupler(loco.trainset.firstCar.frontCoupler);
+            Coupler rearEnd = CouplerLogic.GetLastCoupler(loco.trainset.lastCar.rearCoupler);
+            frontEnd.GetFirstCouplerInRange(2.5f)?.TryCouple();
+            rearEnd.GetFirstCouplerInRange(2.5f)?.TryCouple();
+            yield return new WaitForSeconds(0.5f);
+
+            // Release handbrakes on all non-loco cars now in the trainset
+            foreach (TrainCar car in loco.trainset.cars)
+            {
+                if (!car.IsLoco && car.brakeSystem.hasHandbrake)
+                {
+                    car.brakeSystem.SetHandbrakePosition(0f);
+                    Terminal.Log($"Released handbrake on {car.logicCar.ID}");
+                }
+            }
+        }
+
+        private IEnumerator UncoupleAndApplyHandbrakes(TrainCar loco)
+        {
+            // Record freight cars before uncoupling so we can apply their handbrakes after
+            List<TrainCar> freightCars = loco.trainset.cars.Where(c => !c.IsLoco).ToList();
+
+            if (loco.trainset.firstCar == loco)
+                loco.rearCoupler.Uncouple();
+            else if (loco.trainset.lastCar == loco)
+                loco.frontCoupler.Uncouple();
+            else
+            {
+                loco.frontCoupler.Uncouple();
+                yield return null;
+                loco.rearCoupler.Uncouple();
+            }
+
+            yield return new WaitForSeconds(0.5f);
+
+            foreach (TrainCar car in freightCars)
+            {
+                if (car.brakeSystem.hasHandbrake)
+                {
+                    car.brakeSystem.SetHandbrakePosition(1f);
+                    Terminal.Log($"Applied handbrake on {car.logicCar.ID}");
+                }
+            }
         }
 
     }

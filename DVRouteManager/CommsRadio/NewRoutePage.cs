@@ -24,8 +24,8 @@ namespace DVRouteManager.CommsRadio
         {
             return new List<MenuItem>()
             {
-                new MenuItem("From last used locomotion\nto job destination", "Build route", () => CreateJobRoute(true)),
-                new MenuItem("From last used locomotion\nto specific track", "Select", () => CreateTrackRoute()),
+                new MenuItem("From last used locomotive\nto job destination", "Build route", () => CreateJobRoute(true)),
+                new MenuItem("From last used locomotive\nto specific track", "Select", () => CreateTrackRoute()),
                 new MenuItem("From job cars\nto job destination", "Build route", () => CreateJobRoute(false)),
                 GetExitMenu()
             };
@@ -111,7 +111,7 @@ namespace DVRouteManager.CommsRadio
 
                 if (Module.ActiveRoute.IsSet)
                 {
-                    StringBuilder via = Module.ActiveRoute.Route.Path.Select(p => p.logicTrack.ID.FullID)
+                    StringBuilder via = Module.ActiveRoute.Route.Path.Select(p => p.LogicTrack().ID.FullID)
                         .Where(s => !s.StartsWith(SelectTrackPage.GENERAL_TRACK_PREFIX))
                         .Select(s => s.GetUntilOrEmpty(SelectTrackPage.TRACK_PARTS_SEPARATOR))
                         .Distinct()

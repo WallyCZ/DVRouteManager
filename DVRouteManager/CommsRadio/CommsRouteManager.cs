@@ -24,7 +24,7 @@ namespace DVRouteManager.CommsRadio
         Dictionary<Type, CRMPage> knownPages = new Dictionary<Type, CRMPage>();
         Stack<(CRMPage, Action<CRMPage>)> returnPages = new Stack<(CRMPage, Action<CRMPage>)>();
 
-        public const string TITLE = "ROUTE MNGR";
+        public const string TITLE = "ROUTE MANAGER";
 
         public CommsRadioDisplay display;
 

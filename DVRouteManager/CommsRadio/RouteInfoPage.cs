@@ -41,7 +41,7 @@ namespace DVRouteManager.CommsRadio
             {
                 var carsCount = Module.ActiveRoute.RouteTracker.Trainset.cars.Count;
                 var trainLength = Module.ActiveRoute.RouteTracker.Trainset.cars.Sum(c => c.logicCar.length);
-                var trainWeight = Module.ActiveRoute.RouteTracker.Trainset.cars.Sum(c => c.logicCar.carOnlyMass + c.logicCar.LoadedCargoAmount * CargoTypes.GetCargoUnitMass(c.logicCar.CurrentCargoTypeInCar));
+                var trainWeight = Module.ActiveRoute.RouteTracker.Trainset.cars.Sum(c => c.massController.CarMass + c.massController.CargoMass);
                 CallMessageSubPage($"Cars: {carsCount}\nTrain length: {trainLength:0} m\nTrain weight: {trainWeight * 0.001f:0} t", "Back");
             }
         }

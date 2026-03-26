@@ -107,7 +107,7 @@ namespace DVRouteManager
 
         public static string GetJunctionId(RailTrack prevTrack, RailTrack track, RailTrack nextTrack)
         {
-            return $"{prevTrack?.logicTrack.ID.FullID}->{track?.logicTrack.ID.FullID}->{nextTrack?.logicTrack.ID.FullID}";
+            return $"{prevTrack?.LogicTrack().ID.FullID}->{track?.LogicTrack().ID.FullID}->{nextTrack?.LogicTrack().ID.FullID}";
         }
 
         public class WalkPathData
@@ -141,7 +141,7 @@ namespace DVRouteManager
                     var track = enumerator.Current;
 
 #if DEBUG2
-                    Terminal.Log($"Track ID: {track.logicTrack.ID.FullID}");
+                    Terminal.Log($"Track ID: {track.LogicTrack().ID.FullID}");
 #endif
 
                     RailTrack nextTrack = null;
@@ -172,7 +172,7 @@ namespace DVRouteManager
                     }
                     else
                     {
-                        walkData.distanceFromStart += track.logicTrack.length;
+                        walkData.distanceFromStart += track.LogicTrack().length;
                     }
 
                     prevTrack = track;
@@ -195,9 +195,9 @@ namespace DVRouteManager
 
                 if (walkData.currentTrack.inJunction != null && walkData.prevTrack != null)
                 {
-                    string branches = "[" + walkData.currentTrack.inJunction.outBranches.Select(b => b.track.logicTrack.ID.FullID).Aggregate((a, b) => a + "|" + b) + "]";
+                    string branches = "[" + walkData.currentTrack.inJunction.outBranches.Select(b => b.track.LogicTrack().ID.FullID).Aggregate((a, b) => a + "|" + b) + "]";
 #if DEBUG
-                        Terminal.Log($"InJunction track: {walkData.currentTrack.logicTrack.ID.FullID} nexttrack {walkData.nextTrack.logicTrack.ID.FullID} inbranch {walkData.currentTrack.inJunction.inBranch.track.logicTrack.ID.FullID} outbranches {branches} selectedBranch {walkData.currentTrack.inJunction.selectedBranch}");
+                        Terminal.Log($"InJunction track: {walkData.currentTrack.LogicTrack().ID.FullID} nexttrack {walkData.nextTrack.LogicTrack().ID.FullID} inbranch {walkData.currentTrack.inJunction.inBranch.track.LogicTrack().ID.FullID} outbranches {branches} selectedBranch {walkData.currentTrack.inJunction.selectedBranch}");
 #endif
                     if (!junctionsForReversing.Contains(walkData.currentTrack.inJunction) && SwitchJunctionIfNeeded(walkData.currentTrack, walkData.prevTrack, walkData.currentTrack.inJunction))
                     {
@@ -207,9 +207,9 @@ namespace DVRouteManager
 
                 if (walkData.currentTrack.outJunction != null && walkData.nextTrack != null)
                 {
-                    string branches = "[" + walkData.currentTrack.outJunction.outBranches.Select(b => b.track.logicTrack.ID.FullID).Aggregate((a, b) => a + "|" + b) + "]";
+                    string branches = "[" + walkData.currentTrack.outJunction.outBranches.Select(b => b.track.LogicTrack().ID.FullID).Aggregate((a, b) => a + "|" + b) + "]";
 #if DEBUG
-                        Terminal.Log($"OutJunction track: {walkData.currentTrack.logicTrack.ID.FullID} nexttrack {walkData.nextTrack.logicTrack.ID.FullID} inbranch {walkData.currentTrack.outJunction.inBranch.track.logicTrack.ID.FullID} outbranches {branches} selectedBranch {walkData.currentTrack.outJunction.selectedBranch}");
+                        Terminal.Log($"OutJunction track: {walkData.currentTrack.LogicTrack().ID.FullID} nexttrack {walkData.nextTrack.LogicTrack().ID.FullID} inbranch {walkData.currentTrack.outJunction.inBranch.track.LogicTrack().ID.FullID} outbranches {branches} selectedBranch {walkData.currentTrack.outJunction.selectedBranch}");
 #endif
                     if (!junctionsForReversing.Contains(walkData.currentTrack.outJunction) && SwitchJunctionIfNeeded(walkData.currentTrack, walkData.nextTrack, walkData.currentTrack.outJunction))
                     {
@@ -223,6 +223,24 @@ namespace DVRouteManager
                     Terminal.Log($"reversing junction {reversingJunction.GetInstanceID()}");
 #endif
                     junctionsForReversing.Add(reversingJunction);
+                }
+
+                // Rotate turntable to align with the path entry/exit spurs
+                if (walkData.prevTrack != null && walkData.nextTrack != null)
+                {
+                    TurntableRailTrack trt;
+                    if (PathFinder._turntableTrackToTRT != null &&
+                        PathFinder._turntableTrackToTRT.TryGetValue(walkData.currentTrack, out trt) && trt != null)
+                    {
+                        var entryEnd = trt.trackEnds?.FirstOrDefault(te => te?.track == walkData.prevTrack);
+                        if (entryEnd != null)
+                        {
+                            trt.targetYRotation = entryEnd.angle;
+                            trt.RotateToTargetRotation(true);
+                            count++;
+                            Terminal.Log($"Turntable rotated to {entryEnd.angle:0.#}° ({walkData.prevTrack.LogicTrack().ID.FullID} → {walkData.nextTrack.LogicTrack().ID.FullID})");
+                        }
+                    }
                 }
 
                 return true;
@@ -249,7 +267,7 @@ namespace DVRouteManager
 
             if (branchIndex != -1 && branchIndex != junction.selectedBranch)
             {
-                Terminal.Log($"Switch {track.logicTrack.ID.FullID} -> {trackToSwitch.logicTrack.ID.FullID}");
+                Terminal.Log($"Switch {track.LogicTrack().ID.FullID} -> {trackToSwitch.LogicTrack().ID.FullID}");
                 junction.Switch(Junction.SwitchMode.NO_SOUND);
                 return true;
             }
@@ -318,11 +336,14 @@ namespace DVRouteManager
 
             trackTransitions.Add(new TrackTransition() { track = FirstTrack, nextTrack = SecondTrack });
 
-            return await Route.FindRoute(FirstTrack.logicTrack, LastTrack.logicTrack, Module.settings.ReversingStrategy, Trainset, trackTransitions);
+            return await Route.FindRoute(FirstTrack.LogicTrack(), LastTrack.LogicTrack(), Module.settings.ReversingStrategy, Trainset, trackTransitions);
         }
 
         public async static Task<Route> FindRoute(Track begin, Track end, ReversingStrategy reversingStrategy, Trainset trainset, List<TrackTransition> trackTransitions = null)
         {
+            if (begin.ID.FullID == end.ID.FullID)
+                throw new CommandException("You're already there");
+
             PathFinder pathFinder = new PathFinder(begin, end);
             Route route = await FindRoute(begin, end, trainset, false, trackTransitions);
 
@@ -364,7 +385,7 @@ namespace DVRouteManager
 
             var path = await pathFinder.FindPath(allowReverses, consistLength, trackTransitions);
 
-            if (path == null)
+            if (path == null || path.Count == 0)
                 return null;
 
             return new Route(path, end, trainset);
