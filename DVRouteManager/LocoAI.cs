@@ -68,6 +68,40 @@ namespace DVRouteManager
         }
 
         /// <summary>
+        /// Returns the most restrictive speed limit within braking distance ahead on the route.
+        /// Lookahead = v²/0.8 + 50 m (assumes ~0.4 m/s² deceleration), capped at 1500 m.
+        /// Falls back to current track's limit if path not available.
+        /// </summary>
+        private float GetLookaheadSpeedLimit(RailTrack currentTrack, float currentSpeedKmh)
+        {
+            float currentLimit = GetTrackSpeedLimit(currentTrack);
+
+            var path = RouteTracker?.Route?.Path;
+            if (path == null) return currentLimit;
+
+            int startIdx = path.IndexOf(currentTrack);
+            if (startIdx < 0) return currentLimit;
+
+            // Match the game's sign placement: UpcomingSpeedDown signs appear ~speed*2 m
+            // before the speed change. We use speed*3 to give a small safety margin on top.
+            float lookaheadM = Mathf.Max(currentSpeedKmh * 3f, 100f);
+
+            float minLimit = currentLimit;
+            float distAhead = 0f;
+
+            for (int i = startIdx + 1; i < path.Count && distAhead < lookaheadM; i++)
+            {
+                var t = path[i];
+                if (t == null) break;
+                float limit = GetTrackSpeedLimit(t);
+                if (limit < minLimit) minLimit = limit;
+                distAhead += (float)t.LogicTrack().length;
+            }
+
+            return minLimit;
+        }
+
+        /// <summary>
         /// Computes the speed limit for a track using the exact same method the game uses
         /// to place speed-limit signs: BezierArcApproximation finds the minimum curve radius,
         /// then the same radius→speed table from SignPlacer.CurveSegmentInfo.GetMaxSpeedForRadius()
@@ -257,12 +291,12 @@ namespace DVRouteManager
                     }
                     else
                     {
-                        TargetSpeed = GetTrackSpeedLimit(trainCar.Bogies[0].track);
+                        TargetSpeed = GetLookaheadSpeedLimit(trainCar.Bogies[0].track, speed);
                     }
                 }
                 else if (RouteTracker.TrackState == RouteTracker.TrackingState.OnStart)
                 {
-                    TargetSpeed = GetTrackSpeedLimit(trainCar.Bogies[0].track);
+                    TargetSpeed = GetLookaheadSpeedLimit(trainCar.Bogies[0].track, speed);
                 }
                 else if (RouteTracker.TrackState == RouteTracker.TrackingState.StopTrainAfterSwitch)
                 {
@@ -289,7 +323,7 @@ namespace DVRouteManager
                     {
                         yield return Module.StartCoroutine(Reverse());
                         shouldreverse = false;
-                        TargetSpeed = GetTrackSpeedLimit(trainCar.Bogies[0].track);
+                        TargetSpeed = GetLookaheadSpeedLimit(trainCar.Bogies[0].track, speed);
                     }
                 }
 

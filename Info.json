@@ -2,9 +2,9 @@
     "Id": "DVRouteManager",
     "DisplayName": "Route Manager (Overhauled)",
     "Author": "Wally",
-    "Version": "0.4.0",
+    "Version": "0.3.4",
     "EntryMethod": "DVRouteManager.Module.Load",
-    "HomePage": "https://github.com/odwales20/DVRouteManager",
-    "Repository": "https://raw.githubusercontent.com/odwales20/DVRouteManager/master/Repository.json",
+    "HomePage": "https://github.com/WallyCZ/DVRouteManager",
+    "Repository": "https://raw.githubusercontent.com/WallyCZ/DVRouteManager/master/Repository.json",
     "Requirements": ["CommsRadioAPI"]
 }

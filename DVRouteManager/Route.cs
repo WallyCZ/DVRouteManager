@@ -332,11 +332,11 @@ namespace DVRouteManager
 
         public async Task<Route> FindOppositeRoute()
         {
-            List<TrackTransition> trackTransitions = new List<TrackTransition>();
-
-            trackTransitions.Add(new TrackTransition() { track = FirstTrack, nextTrack = SecondTrack });
-
-            return await Route.FindRoute(FirstTrack.LogicTrack(), LastTrack.LogicTrack(), Module.settings.ReversingStrategy, Trainset, trackTransitions);
+            // Route from the original destination back to the original start.
+            // The old approach banned FirstTrack→SecondTrack and re-ran the same
+            // start→end, which forced the pathfinder around an alternate loop
+            // instead of simply reversing the path.
+            return await Route.FindRoute(LastTrack.LogicTrack(), FirstTrack.LogicTrack(), Module.settings.ReversingStrategy, Trainset);
         }
 
         public async static Task<Route> FindRoute(Track begin, Track end, ReversingStrategy reversingStrategy, Trainset trainset, List<TrackTransition> trackTransitions = null)
