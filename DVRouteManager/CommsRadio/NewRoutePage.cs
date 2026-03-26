@@ -111,7 +111,7 @@ namespace DVRouteManager.CommsRadio
 
                 if (Module.ActiveRoute.IsSet)
                 {
-                    StringBuilder via = Module.ActiveRoute.Route.Path.Select(p => p.logicTrack.ID.FullID)
+                    StringBuilder via = Module.ActiveRoute.Route.Path.Select(p => p.LogicTrack().ID.FullID)
                         .Where(s => !s.StartsWith(SelectTrackPage.GENERAL_TRACK_PREFIX))
                         .Select(s => s.GetUntilOrEmpty(SelectTrackPage.TRACK_PARTS_SEPARATOR))
                         .Distinct()

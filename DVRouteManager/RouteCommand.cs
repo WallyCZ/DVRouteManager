@@ -1,6 +1,5 @@
 ﻿using CommandTerminal;
 using DV.Logic.Job;
-using DV.Teleporters;
 using DVRouteManager.Extensions;
 using System;
 using System.Collections;
@@ -124,7 +123,7 @@ namespace DVRouteManager
                     throw new CommandException("No suitable task");
                 }
 
-                Track startTrack = trainCar.trainset.firstCar.Bogies[0].track.logicTrack;
+                Track startTrack = trainCar.trainset.firstCar.Bogies[0].track.LogicTrack();
 
                 await FindAndSwitch(startTrack, routeTracker.CurrentTask.DestinationTrack, ReversingStrategy.ChooseBest, trainCar.trainset);
 
@@ -147,7 +146,7 @@ namespace DVRouteManager
                     throw new CommandException("Tracker has no task");
                 }
 
-                Track startTrack = trainCar.trainset.firstCar.Bogies[0].track.logicTrack;
+                Track startTrack = trainCar.trainset.firstCar.Bogies[0].track.LogicTrack();
 
                 await FindAndSwitch(startTrack, Module.ActiveRoute.RouteTracker.CurrentTask.DestinationTrack, ReversingStrategy.ChooseBest, trainCar.trainset);
 
@@ -189,11 +188,11 @@ namespace DVRouteManager
                 }
 
 
-                RailTrack startTrack = RailTrackRegistry.Instance.AllTracks.FirstOrDefault((RailTrack track) => track?.logicTrack.ID.FullID == args[1].String);
+                RailTrack startTrack = RailTrackRegistryBase.RailTracks.FirstOrDefault((RailTrack track) => track?.LogicTrack().ID.FullID == args[1].String);
 
-                RailTrack goalTrack = RailTrackRegistry.Instance.AllTracks.FirstOrDefault((RailTrack track) => track?.logicTrack.ID.FullID == args[3].String);
+                RailTrack goalTrack = RailTrackRegistryBase.RailTracks.FirstOrDefault((RailTrack track) => track?.LogicTrack().ID.FullID == args[3].String);
 
-                RouteTaskChain chain = RouteTaskChain.FromDestination(goalTrack.logicTrack, trainset);
+                RouteTaskChain chain = RouteTaskChain.FromDestination(goalTrack.LogicTrack(), trainset);
                 var tracker = new RouteTracker(chain, false);
 
 
@@ -202,7 +201,7 @@ namespace DVRouteManager
                     throw new CommandException("start track or goal track not found");
                 }
 
-                await FindAndSwitch(startTrack.logicTrack, goalTrack.logicTrack, Module.settings.ReversingStrategy, trainset);
+                await FindAndSwitch(startTrack.LogicTrack(), goalTrack.LogicTrack(), Module.settings.ReversingStrategy, trainset);
 
                 tracker.SetRoute(Module.ActiveRoute.Route, trainset);
                 Module.ActiveRoute.RouteTracker = tracker;
@@ -225,7 +224,7 @@ namespace DVRouteManager
 
                     Module.ActiveRoute.RouteTracker.SetRoute(route, route.Trainset);
 
-                    Terminal.Log($"Route {route.Length} {route?.SecondTrack?.logicTrack.ID.FullDisplayID}");
+                    Terminal.Log($"Route {route.Length} {route?.SecondTrack?.LogicTrack().ID.FullDisplayID}");
                 }
                 else
                 {
@@ -250,7 +249,7 @@ namespace DVRouteManager
                     Terminal.Log("Active route:");
                     Terminal.Log( Module.ActiveRoute.Route.ToString());
 #if DEBUG
-                    Terminal.Log( Module.ActiveRoute.Route.Path.Select(t => t.logicTrack.ID.FullID).Aggregate((i, j) => i + "->" + j) );
+                    Terminal.Log( Module.ActiveRoute.Route.Path.Select(t => t.LogicTrack().ID.FullID).Aggregate((i, j) => i + "->" + j) );
 #endif
                 }
                 else
@@ -261,21 +260,21 @@ namespace DVRouteManager
 #if DEBUG
             else if (args[0].String == "track")
             {
-                var track = RailTrackRegistry.Instance.AllTracks.Where(t => t.logicTrack.ID.FullID.ToLower() == args[1].String.ToLower()).FirstOrDefault();
+                var track = RailTrackRegistryBase.RailTracks.Where(t => t.LogicTrack().ID.FullID.ToLower() == args[1].String.ToLower()).FirstOrDefault();
                 if(track == null)
                 {
                     throw new CommandException("track not found");
                 }
 
-                Terminal.Log($"{track.logicTrack.ID.FullID} {track.logicTrack.length}m");
+                Terminal.Log($"{track.LogicTrack().ID.FullID} {track.LogicTrack().length}m");
 
                 if(track.inIsConnected)
                 {
-                    Terminal.Log("IN: " + track.GetAllInBranches().Select(b => b.track.logicTrack.ID.FullID).Aggregate((a, b) => a + "; " + b)  );
+                    Terminal.Log("IN: " + track.GetAllInBranches().Select(b => b.track.LogicTrack().ID.FullID).Aggregate((a, b) => a + "; " + b)  );
                 }
                 if (track.outIsConnected)
                 {
-                    Terminal.Log("OUT: " + track.GetAllOutBranches().Select(b => b.track.logicTrack.ID.FullID).Aggregate((a, b) => a + "; " + b));
+                    Terminal.Log("OUT: " + track.GetAllOutBranches().Select(b => b.track.LogicTrack().ID.FullID).Aggregate((a, b) => a + "; " + b));
                 }
             }
             else if (args[0].String == "trainset")
@@ -309,24 +308,34 @@ namespace DVRouteManager
                 if(args[1].String == "stop")
                 {
                     var locoAI = Module.GetLocoAI(trainCar);
-                    locoAI.Stop();
+                    locoAI.StopAll();
                     return;
                 }
 
-                RailTrack goalTrack = RailTrackRegistry.Instance.AllTracks.FirstOrDefault((RailTrack track) => track?.logicTrack.ID.FullID == args[1].String);
+                RailTrack goalTrack = RailTrackRegistryBase.RailTracks.FirstOrDefault((RailTrack track) => track?.LogicTrack().ID.FullID == args[1].String);
                 if (goalTrack == null)
                 {
                     throw new CommandException("Goal track not found");
                 }
 
-                RouteTaskChain chain = RouteTaskChain.FromDestination(goalTrack.logicTrack, trainCar.trainset);
+                Track startTrack = trainCar.trainset.firstCar.Bogies[0].track.LogicTrack();
+                Track destTrack = goalTrack.LogicTrack();
+
+                var route = await Route.FindRoute(startTrack, destTrack, ReversingStrategy.ChooseBest, trainCar.trainset);
+
+                if (route == null)
+                {
+                    Module.ActiveRoute.ClearRoute();
+                    throw new CommandException("Path cannot be found");
+                }
+
+                Module.ActiveRoute.Route = route;
+                route.AdjustSwitches();
+
+                RouteTaskChain chain = RouteTaskChain.FromDestination(destTrack, trainCar.trainset);
                 var tracker = new RouteTracker(chain, false);
-
-                Track startTrack = trainCar.trainset.firstCar.Bogies[0].track.logicTrack;
-
-                var route = await Route.FindRoute(startTrack, tracker.CurrentTask.DestinationTrack, ReversingStrategy.ChooseBest, trainCar.trainset);
-
                 tracker.SetRoute(route, trainCar.trainset);
+                Module.ActiveRoute.RouteTracker = tracker;
 
                 var driver = Module.GetLocoAI(trainCar);
                 driver.StartAI(tracker);
