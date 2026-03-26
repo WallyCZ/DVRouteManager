@@ -61,6 +61,7 @@
       <HintPath>$(DVInstallPath)Mods\CommsRadioAPI\CommsRadioAPI.dll</HintPath>
       <Private>False</Private>
     </Reference>
+    <Reference Include="CommandTerminal" />
     <Reference Include="DV.Interaction">
       <HintPath>$(DVInstallPath)DerailValley_Data\Managed\DV.Interaction.dll</HintPath>
       <Private>False</Private>

@@ -24,8 +24,8 @@ namespace DVRouteManager.CommsRadio
         {
             return new List<MenuItem>()
             {
-                new MenuItem("From last used locomotion\nto job destination", "Build route", () => CreateJobRoute(true)),
-                new MenuItem("From last used locomotion\nto specific track", "Select", () => CreateTrackRoute()),
+                new MenuItem("From last used locomotive\nto job destination", "Build route", () => CreateJobRoute(true)),
+                new MenuItem("From last used locomotive\nto specific track", "Select", () => CreateTrackRoute()),
                 new MenuItem("From job cars\nto job destination", "Build route", () => CreateJobRoute(false)),
                 GetExitMenu()
             };
