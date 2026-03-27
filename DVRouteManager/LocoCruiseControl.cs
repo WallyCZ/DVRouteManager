@@ -176,9 +176,9 @@ namespace DVRouteManager
             }
 
             if (error < -3.0f || TargetSpeed < Mathf.Epsilon)
-                remoteControl.UpdateIndependentBrake(0.3f * error * -1.0f * dt);
-            else if (remoteControl.GetTargetIndependentBrake() > Mathf.Epsilon)
-                remoteControl.UpdateIndependentBrake(-30.0f * dt);
+                remoteControl.UpdateBrake(0.3f * error * -1.0f * dt);
+            else if (remoteControl.GetTargetBrake() > Mathf.Epsilon)
+                remoteControl.UpdateBrake(-30.0f * dt);
 
             remoteControl.UpdateThrottle(ThrottleCurveFactor(remoteControl.GetTargetThrottle(), controlValue > 0.0f) * controlValue);
 
