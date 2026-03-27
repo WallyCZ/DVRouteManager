@@ -1,4 +1,4 @@
-using CommandTerminal;
+﻿using CommandTerminal;
 using DV.Logic.Job;
 using System;
 using System.Collections;
@@ -473,35 +473,46 @@ namespace DVRouteManager
             Track carTrack = freightTrainset.firstCar.Bogies[0].track.LogicTrack();
             Track locoTrack = loco.trainset.firstCar.Bogies[0].track.LogicTrack();
 
-            var toCarsTask = Route.FindRoute(locoTrack, carTrack, ReversingStrategy.ChooseBest, loco.trainset);
-            while (!toCarsTask.IsCompleted) yield return null;
+            bool alreadyCoupled = loco.trainset == freightTrainset;
 
-            if (!_freightHaulActive) yield break;
-
-            if (toCarsTask.IsFaulted || toCarsTask.Result == null)
+            if (loco.trainset == freightTrainset)
             {
-                Terminal.Log("Freight haul: cannot find route to cars – " + (toCarsTask.Exception?.InnerException?.Message ?? "null"));
-                _freightHaulActive = false;
-                yield break;
+                Terminal.Log("Freight haul: already coupled to target trainset, skipping routing to cars");
             }
+            else
+            {
 
-            var chain1 = RouteTaskChain.FromDestination(carTrack, loco.trainset);
-            var tracker1 = new RouteTracker(chain1, true);
-            tracker1.SetRoute(toCarsTask.Result, loco.trainset);
-            Module.ActiveRoute.Route = toCarsTask.Result;
-            Module.ActiveRoute.RouteTracker = tracker1;
+                var toCarsTask = Route.FindRoute(locoTrack, carTrack, ReversingStrategy.ChooseBest, loco.trainset);
+                while (!toCarsTask.IsCompleted) yield return null;
 
-            StartAI(tracker1);
-            while (running && _freightHaulActive) yield return null;
+                if (!_freightHaulActive) yield break;
 
-            if (!_freightHaulActive) { Stop(); yield break; }
+                if (toCarsTask.IsFaulted || toCarsTask.Result == null)
+                {
+                    Terminal.Log("Freight haul: cannot find route to cars – " + (toCarsTask.Exception?.InnerException?.Message ?? "null"));
+                    _freightHaulActive = false;
+                    yield break;
+                }
 
-            // ── Phase 2: couple and release handbrakes ───────────────────────
-            Terminal.Log("Freight haul: phase 2 – coupling");
-            yield return TryCoupleAndReleaseHandbrakes(loco);
-            yield return new WaitForSeconds(1.5f);
+                var chain1 = RouteTaskChain.FromDestination(carTrack, loco.trainset);
+                var tracker1 = new RouteTracker(chain1, true);
+                tracker1.SetRoute(toCarsTask.Result, loco.trainset);
+                Module.ActiveRoute.Route = toCarsTask.Result;
+                Module.ActiveRoute.RouteTracker = tracker1;
 
-            if (!_freightHaulActive) yield break;
+                StartAI(tracker1);
+                while (running && _freightHaulActive) yield return null;
+
+                if (!_freightHaulActive) { Stop(); yield break; }
+
+                // ── Phase 2: couple and release handbrakes ───────────────────────
+                Terminal.Log("Freight haul: phase 2 – coupling");
+                yield return TryCoupleAndReleaseHandbrakes(loco);
+                yield return new WaitForSeconds(1.5f);
+
+                if (!_freightHaulActive) yield break;
+
+            }
 
             // ── Phase 3: drive to destination ────────────────────────────────
             Terminal.Log($"Freight haul: phase 3 – routing to {task.DestinationTrack.ID.FullID}");
