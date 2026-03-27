@@ -1,4 +1,4 @@
-﻿using CommandTerminal;
+using CommandTerminal;
 using DV.Logic.Job;
 using System;
 using System.Collections;
@@ -226,6 +226,29 @@ namespace DVRouteManager
             return true;
         }
 
+        private IEnumerator ReleaseAllBrakes()
+        {
+            //// ── Release handbrakes on wagons ─────────────────────────────
+            //foreach (TrainCar car in loco.trainset.cars)
+            //{
+            //    if (!car.IsLoco && car.brakeSystem.hasHandbrake)
+            //    {
+            //        car.brakeSystem.SetHandbrakePosition(0f);
+            //        Terminal.Log($"Released handbrake on {car.logicCar.ID}");
+            //    }
+            //}
+
+            // ── Release loco brakes (train + independent) ────────────────
+            // Use a loop to step them down smoothly
+            for (int i = 0; i < 10; i++)
+            {
+                remoteControl.UpdateIndependentBrake(-1.0f);
+                remoteControl.UpdateBrake(-1.0f);
+
+                yield return new WaitForSeconds(0.3f);
+            }
+        }
+
         private IEnumerator AICoroutine()
         {
             const float TIME_WAIT = 0.3f;
@@ -249,6 +272,8 @@ namespace DVRouteManager
             bool couplerApproach = false;
 
             RouteTracker.TrackingState lastState = RouteTracker.TrackState;
+
+            yield return ReleaseAllBrakes();
 
             while (running)
             {
@@ -390,6 +415,8 @@ namespace DVRouteManager
             yield return null;
             remoteControl.UpdateReverser(direction ? ToggleDirection.DOWN : ToggleDirection.UP);
             yield return null;
+
+            yield return ReleaseAllBrakes();
         }
 
         IEnumerator BrakePulse(int level, float waitTime)
