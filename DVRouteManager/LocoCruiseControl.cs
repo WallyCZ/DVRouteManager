@@ -67,6 +67,11 @@ namespace DVRouteManager
         private MethodInfo    _tryGetPortMI;
         private PropertyInfo  _portValueProp;
 
+        // DM3 cache for simFlow.TryGetPort
+        private SimController _dm3SimCtrl;
+        private MethodInfo _dm3TryGetPortMI;
+        private PropertyInfo _dm3PortValueProp;
+
         // ────────────────────────────────────────────────────────────────────
 
         public LocoCruiseControl(ILocomotiveRemoteControl remoteControl, TrainCar car = null)
@@ -176,24 +181,126 @@ namespace DVRouteManager
             }
 
             if (error < -3.0f || TargetSpeed < Mathf.Epsilon)
-                remoteControl.UpdateIndependentBrake(0.3f * error * -1.0f * dt);
-            else if (remoteControl.GetTargetIndependentBrake() > Mathf.Epsilon)
-                remoteControl.UpdateIndependentBrake(-30.0f * dt);
+                remoteControl.UpdateBrake(0.3f * error * -1.0f * dt);
+            else if (remoteControl.GetTargetBrake() > Mathf.Epsilon)
+                remoteControl.UpdateBrake(-30.0f * dt);
 
             remoteControl.UpdateThrottle(ThrottleCurveFactor(remoteControl.GetTargetThrottle(), controlValue > 0.0f) * controlValue);
 
             return targetAcceleration;
         }
 
+        private float GetDM3Rpm()
+        {
+            try
+            {
+                if (_dm3SimCtrl == null)
+                    _dm3SimCtrl = trainCar?.SimController;
+
+                if (_dm3SimCtrl?.simFlow == null)
+                    return -1f;
+
+                if (_dm3TryGetPortMI == null)
+                    _dm3TryGetPortMI = _dm3SimCtrl.simFlow.GetType()
+                        .GetMethod("TryGetPort", BindingFlags.Instance | BindingFlags.Public);
+
+                if (_dm3TryGetPortMI == null)
+                    return -1f;
+
+                var args = new object[] { "de.RPM", null, true };
+                if (!(bool)_dm3TryGetPortMI.Invoke(_dm3SimCtrl.simFlow, args) || args[1] == null)
+                    return -1f;
+
+                if (_dm3PortValueProp == null)
+                    _dm3PortValueProp = args[1].GetType().GetProperty("Value");
+
+                return _dm3PortValueProp != null
+                    ? (float)_dm3PortValueProp.GetValue(args[1])
+                    : -1f;
+            }
+            catch
+            {
+                return -1f;
+            }
+        }
+
+        private struct DM3GearPosition
+        {
+            public int GearA;
+            public int GearB;
+
+            public DM3GearPosition(int gearA, int gearB)
+            {
+                GearA = gearA;
+                GearB = gearB;
+            }
+
+            public override string ToString()
+            {
+                return $"{GearA},{GearB}";
+            }
+        }
+
+        private int _currentDM3GearIndex = 0;
+
+        private static readonly DM3GearPosition[] DM3_GEAR_SEQUENCE =
+        {
+            new DM3GearPosition(1, 1),
+            new DM3GearPosition(1, 2),
+            new DM3GearPosition(2, 1),
+            new DM3GearPosition(2, 2),
+            new DM3GearPosition(3, 1),
+            // new DM3GearPosition(1, 3), // intentionally skipped
+            new DM3GearPosition(3, 2),
+            new DM3GearPosition(2, 3),
+            new DM3GearPosition(3, 3),
+        };
+
+        private bool ShiftDM3Gear(int direction)
+        {
+            var controls = GetInteriorControls();
+            if (controls == null)
+                return false;
+
+            int targetIndex = _currentDM3GearIndex + direction;
+
+            DM3GearPosition current = DM3_GEAR_SEQUENCE[_currentDM3GearIndex];
+            DM3GearPosition target = DM3_GEAR_SEQUENCE[targetIndex];
+
+            if (target.GearA > current.GearA)
+                controls.MoveScrollable(InteriorControlsManager.ControlType.GearboxA, 1);
+            else if (target.GearA < current.GearA)
+                controls.MoveScrollable(InteriorControlsManager.ControlType.GearboxA, -1);
+
+            if (target.GearB > current.GearB)
+                controls.MoveScrollable(InteriorControlsManager.ControlType.GearboxB, 1);
+            else if (target.GearB < current.GearB)
+                controls.MoveScrollable(InteriorControlsManager.ControlType.GearboxB, -1);
+
+            _currentDM3GearIndex = targetIndex;
+            return true;
+        }
+
         // ── DM3 gear management ──────────────────────────────────────────────
         // Returns true while a shift is in progress (PID caller should skip output).
         private bool HandleDM3GearShift(float dt)
         {
-            float rpm = _indicators?.engineRpm?.Value ?? 0f;
+            float rpm = GetDM3Rpm();
+            if (rpm < 0f)
+                return false;
+
             float now = Time.time;
 
             if (_awaitingShift)
             {
+                int targetIndex = _currentDM3GearIndex + _pendingShiftDir;
+                if (targetIndex < 0 || targetIndex >= DM3_GEAR_SEQUENCE.Length)
+                {
+                    _lastGearRpm = rpm;
+                    _awaitingShift = false;
+                    return false; // Dont shift if already on min or max gear
+                }
+
                 // Zero throttle and wait for RPM to settle before moving the lever
                 remoteControl.UpdateThrottle(-100f);
 
@@ -203,14 +310,13 @@ namespace DVRouteManager
                     var controls = GetInteriorControls();
                     if (controls != null)
                     {
-                        controls.MoveScrollable(InteriorControlsManager.ControlType.GearboxA, _pendingShiftDir);
-                        controls.MoveScrollable(InteriorControlsManager.ControlType.GearboxB, _pendingShiftDir);
+                        ShiftDM3Gear(_pendingShiftDir);
 #if DEBUG
-                        Terminal.Log($"DM3: gear lever moved {(_pendingShiftDir > 0 ? "up" : "down")} (RPM {rpm:0})");
+                        Terminal.Log($"DM3: shifted to {DM3_GEAR_SEQUENCE[_currentDM3GearIndex]} (RPM {rpm:0})");
 #endif
+                        _awaitingShift = false;
+                        _lastShiftTime = now;
                     }
-                    _awaitingShift = false;
-                    _lastShiftTime = now;
                 }
 
                 _lastGearRpm = rpm;

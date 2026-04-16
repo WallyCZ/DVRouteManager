@@ -226,6 +226,29 @@ namespace DVRouteManager
             return true;
         }
 
+        private IEnumerator ReleaseAllBrakes()
+        {
+            //// ── Release handbrakes on wagons ─────────────────────────────
+            //foreach (TrainCar car in loco.trainset.cars)
+            //{
+            //    if (!car.IsLoco && car.brakeSystem.hasHandbrake)
+            //    {
+            //        car.brakeSystem.SetHandbrakePosition(0f);
+            //        Terminal.Log($"Released handbrake on {car.logicCar.ID}");
+            //    }
+            //}
+
+            // ── Release loco brakes (train + independent) ────────────────
+            // Use a loop to step them down smoothly
+            for (int i = 0; i < 10; i++)
+            {
+                remoteControl.UpdateIndependentBrake(-1.0f);
+                remoteControl.UpdateBrake(-1.0f);
+
+                yield return new WaitForSeconds(0.3f);
+            }
+        }
+
         private IEnumerator AICoroutine()
         {
             const float TIME_WAIT = 0.3f;
@@ -249,6 +272,8 @@ namespace DVRouteManager
             bool couplerApproach = false;
 
             RouteTracker.TrackingState lastState = RouteTracker.TrackState;
+
+            yield return ReleaseAllBrakes();
 
             while (running)
             {
@@ -390,6 +415,8 @@ namespace DVRouteManager
             yield return null;
             remoteControl.UpdateReverser(direction ? ToggleDirection.DOWN : ToggleDirection.UP);
             yield return null;
+
+            yield return ReleaseAllBrakes();
         }
 
         IEnumerator BrakePulse(int level, float waitTime)
@@ -446,35 +473,46 @@ namespace DVRouteManager
             Track carTrack = freightTrainset.firstCar.Bogies[0].track.LogicTrack();
             Track locoTrack = loco.trainset.firstCar.Bogies[0].track.LogicTrack();
 
-            var toCarsTask = Route.FindRoute(locoTrack, carTrack, ReversingStrategy.ChooseBest, loco.trainset);
-            while (!toCarsTask.IsCompleted) yield return null;
+            bool alreadyCoupled = loco.trainset == freightTrainset;
 
-            if (!_freightHaulActive) yield break;
-
-            if (toCarsTask.IsFaulted || toCarsTask.Result == null)
+            if (loco.trainset == freightTrainset)
             {
-                Terminal.Log("Freight haul: cannot find route to cars – " + (toCarsTask.Exception?.InnerException?.Message ?? "null"));
-                _freightHaulActive = false;
-                yield break;
+                Terminal.Log("Freight haul: already coupled to target trainset, skipping routing to cars");
             }
+            else
+            {
 
-            var chain1 = RouteTaskChain.FromDestination(carTrack, loco.trainset);
-            var tracker1 = new RouteTracker(chain1, true);
-            tracker1.SetRoute(toCarsTask.Result, loco.trainset);
-            Module.ActiveRoute.Route = toCarsTask.Result;
-            Module.ActiveRoute.RouteTracker = tracker1;
+                var toCarsTask = Route.FindRoute(locoTrack, carTrack, ReversingStrategy.ChooseBest, loco.trainset);
+                while (!toCarsTask.IsCompleted) yield return null;
 
-            StartAI(tracker1);
-            while (running && _freightHaulActive) yield return null;
+                if (!_freightHaulActive) yield break;
 
-            if (!_freightHaulActive) { Stop(); yield break; }
+                if (toCarsTask.IsFaulted || toCarsTask.Result == null)
+                {
+                    Terminal.Log("Freight haul: cannot find route to cars – " + (toCarsTask.Exception?.InnerException?.Message ?? "null"));
+                    _freightHaulActive = false;
+                    yield break;
+                }
 
-            // ── Phase 2: couple and release handbrakes ───────────────────────
-            Terminal.Log("Freight haul: phase 2 – coupling");
-            yield return TryCoupleAndReleaseHandbrakes(loco);
-            yield return new WaitForSeconds(1.5f);
+                var chain1 = RouteTaskChain.FromDestination(carTrack, loco.trainset);
+                var tracker1 = new RouteTracker(chain1, true);
+                tracker1.SetRoute(toCarsTask.Result, loco.trainset);
+                Module.ActiveRoute.Route = toCarsTask.Result;
+                Module.ActiveRoute.RouteTracker = tracker1;
 
-            if (!_freightHaulActive) yield break;
+                StartAI(tracker1);
+                while (running && _freightHaulActive) yield return null;
+
+                if (!_freightHaulActive) { Stop(); yield break; }
+
+                // ── Phase 2: couple and release handbrakes ───────────────────────
+                Terminal.Log("Freight haul: phase 2 – coupling");
+                yield return TryCoupleAndReleaseHandbrakes(loco);
+                yield return new WaitForSeconds(1.5f);
+
+                if (!_freightHaulActive) yield break;
+
+            }
 
             // ── Phase 3: drive to destination ────────────────────────────────
             Terminal.Log($"Freight haul: phase 3 – routing to {task.DestinationTrack.ID.FullID}");
