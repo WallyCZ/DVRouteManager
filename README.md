@@ -36,7 +36,7 @@ Full menu tree accessible from the in-game Comms Radio:
 
 - [Derail Valley](https://store.steampowered.com/app/588030/Derail_Valley/) (current build)
 - [Unity Mod Manager (UMM)](https://www.nexusmods.com/site/mods/21)
-- [CommsRadioAPI](https://www.nexusmods.com/derailvalley/mods/740) — place `CommsRadioAPI.dll` in `Mods\CommsRadioAPI\`
+- [CommsRadioAPI](https://www.nexusmods.com/derailvalley/mods/813) — place `CommsRadioAPI.dll` in `Mods\CommsRadioAPI\`
 
 ---
 
