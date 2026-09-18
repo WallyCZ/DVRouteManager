@@ -100,3 +100,11 @@ Full menu tree accessible from the in-game Comms Radio:
 - [WallyCZ/DVRouteManager](https://github.com/WallyCZ/DVRouteManager) — original mod
 - [RouteSetter](https://github.com/zelmer69/RouteSetter) by zelmer69 — reference for modern CommsRadioAPI usage
 - Derail Valley by [Altfuture](https://altfuture.gg/)
+
+---
+
+## Latest Experimental Version
+
+For the most up-to-date development build, including the newest AI driving, DVSignals, Dual/Double Track routing, steam, DM3, and experimental multi-unit work, see the [Debug branch of odwales20/DVRouteManager](https://github.com/odwales20/DVRouteManager/tree/Debug).
+
+This branch contains experimental features that still require in-game testing. Use the upstream master branch for the stable version.
